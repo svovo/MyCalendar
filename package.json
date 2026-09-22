@@ -1,0 +1,15 @@
+{
+  "name": "mycalendar",
+  "version": "1.0.0",
+  "description": "MyCalendar - Desktop App per la gestione del tempo e attività",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "keywords": ["calendar", "todo", "electron", "desktop"],
+  "author": "Antigravity",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0"
+  }
+}

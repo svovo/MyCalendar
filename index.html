@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="it" class="h-full bg-slate-50">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MyCalendar - Gestione Tempo e Attività</title>
+  
+  <!-- Tailwind CSS (Locale con fallback CDN) -->
+  <script src="js/tailwind.js"></script>
+  <script>
+    if (!window.tailwind) {
+      document.write('<script src="https://cdn.tailwindcss.com"><\/script>');
+    }
+  </script>
+  <script>
+    if (window.tailwind) {
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                50: '#eef2ff',
+                100: '#e0e7ff',
+                500: '#6366f1',
+                600: '#4f46e5',
+                700: '#4338ca',
+              }
+            }
+          }
+        }
+      };
+    }
+  </script>
+
+  <!-- Vue 3 (Locale con fallback CDN) -->
+  <script src="js/vue.global.prod.js"></script>
+  <script>
+    if (!window.Vue) {
+      document.write('<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"><\/script>');
+    }
+  </script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234f46e5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect width='18' height='18' x='3' y='4' rx='2'/><path d='M8 2v4'/><path d='M16 2v4'/><path d='M3 10h18'/></svg>">
+</head>
+<body class="h-full text-slate-800 antialiased overflow-hidden">
+  <div id="app" class="h-full flex flex-col">
+
+    <!-- ========================================== -->
+    <!-- SCHERMATA INIZIALE: LOGIN / NOME UTENTE -->
+    <!-- ========================================== -->
+    <div v-if="!isUserLoggedIn" 
+         class="fixed inset-0 z-50 bg-gradient-to-br from-slate-100 via-indigo-50/50 to-slate-200 flex items-center justify-center p-4">
+      <div class="bg-white rounded-3xl shadow-2xl border border-slate-200/80 p-8 sm:p-10 max-w-md w-full text-center relative overflow-hidden">
+        <!-- Accent Glow -->
+        <div class="absolute -top-12 -right-12 w-36 h-36 bg-brand-500/10 rounded-full blur-2xl pointer-events-none"></div>
+        <div class="absolute -bottom-12 -left-12 w-36 h-36 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+        <!-- App Logo & Badge -->
+        <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-brand-500/30 mx-auto mb-5">
+          <svg class="w-9 h-9" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <rect width="18" height="18" x="3" y="4" rx="2" stroke-width="2"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 2v4M16 2v4M3 10h18"/>
+          </svg>
+        </div>
+
+        <h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+          Benvenuto in <span class="bg-gradient-to-r from-brand-600 to-indigo-600 bg-clip-text text-transparent">MyCalendar</span>
+        </h1>
+        <p class="text-xs sm:text-sm text-slate-500 mt-2">
+          Gestione del tempo e attività sul tuo PC.<br>Inserisci il tuo <strong>Nome Utente</strong> per accedere al tuo spazio dedicato.
+        </p>
+
+        <!-- Form Login / Selezione Profilo -->
+        <form @submit.prevent="loginUser()" class="mt-7 space-y-4">
+          <div class="text-left">
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+              Nome Utente
+            </label>
+            <div class="relative">
+              <input type="text" 
+                     v-model="inputUsername" 
+                     required
+                     autofocus
+                     placeholder="Es. Marco, Luca, Sara..."
+                     class="w-full text-base bg-slate-50 border-2 border-slate-200 focus:border-brand-500 rounded-2xl px-4 py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white shadow-xs transition-all">
+              <div class="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" 
+                  :disabled="!inputUsername.trim() || isLoadingUserData"
+                  class="w-full py-3.5 px-6 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-2xl font-bold text-base shadow-lg shadow-brand-500/25 transition-all flex items-center justify-center space-x-2 focus:outline-none focus:ring-4 focus:ring-brand-500/20">
+            <span v-if="!isLoadingUserData">Entra</span>
+            <span v-else>Caricamento dati...</span>
+            <svg v-if="!isLoadingUserData" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+            </svg>
+          </button>
+        </form>
+
+        <!-- Profili salvati di recente su questo PC -->
+        <div v-if="knownUsers.length > 0" class="mt-6 pt-5 border-t border-slate-100 text-left">
+          <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+            Profili salvati su questo PC:
+          </p>
+          <div class="flex flex-wrap gap-2">
+            <button v-for="user in knownUsers" 
+                    :key="user" 
+                    @click="loginUser(user)" 
+                    class="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-xs font-semibold text-slate-700 border border-slate-200 transition-colors">
+              <span>👤</span>
+              <span>{{ user }}</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-6 text-[11px] text-slate-400 flex items-center justify-center space-x-1">
+          <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+          <span>I dati vengono salvati in automatico sul disco locale</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- INTERFACCIA PRINCIPALE CALENDARIO (AUTENTICATA) -->
+    <!-- ========================================== -->
+    <div v-if="isUserLoggedIn" class="h-full flex flex-col">
+
+    <!-- TOP NAVBAR -->
+    <header class="h-16 bg-white border-b border-slate-200 px-4 flex items-center justify-between flex-shrink-0 shadow-sm z-30">
+      
+      <!-- Brand & Left Drawer Toggle (Mobile) -->
+      <div class="flex items-center space-x-3">
+        <!-- Mobile Left Sidebar Toggle -->
+        <button @click="isLeftDrawerOpen = true" 
+                class="lg:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                title="Apri Gestione Calendari">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" />
+          </svg>
+        </button>
+
+        <!-- Logo & Title -->
+        <div class="flex items-center space-x-2">
+          <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-400 flex items-center justify-center text-white shadow-md shadow-brand-500/20">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <rect width="18" height="18" x="3" y="4" rx="2" stroke-width="2"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 2v4M16 2v4M3 10h18"/>
+            </svg>
+          </div>
+          <div>
+            <span class="text-xl font-bold bg-gradient-to-r from-brand-600 to-indigo-700 bg-clip-text text-transparent">MyCalendar</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation & Date Controls -->
+      <div class="flex items-center space-x-2 sm:space-x-4">
+        <!-- Today Button -->
+        <button @click="goToday" 
+                class="px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors border border-slate-200">
+          Oggi
+        </button>
+
+        <!-- Prev / Next Arrows -->
+        <div class="flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+          <button @click="goPrev" 
+                  class="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-white rounded-md transition-colors"
+                  title="Periodo precedente">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+          </button>
+          <button @click="goNext" 
+                  class="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-white rounded-md transition-colors"
+                  title="Periodo successivo">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Current Range Title -->
+        <h2 class="text-sm sm:text-lg font-bold text-slate-800 capitalize tracking-tight whitespace-nowrap min-w-[130px] sm:min-w-[180px]">
+          {{ viewTitle }}
+        </h2>
+      </div>
+
+      <!-- Right Actions: View Switcher, New Event & Mobile To-Do Toggle -->
+      <div class="flex items-center space-x-2 sm:space-x-3">
+        <!-- View Segmented Switcher -->
+        <div class="hidden md:flex bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">
+          <button @click="setView('month')" 
+                  :class="{'bg-white text-brand-600 shadow-sm font-bold': currentView === 'month'}"
+                  class="px-3 py-1.5 rounded-lg transition-all">
+            Mese
+          </button>
+          <button @click="setView('week')" 
+                  :class="{'bg-white text-brand-600 shadow-sm font-bold': currentView === 'week'}"
+                  class="px-3 py-1.5 rounded-lg transition-all">
+            Settimana
+          </button>
+          <button @click="setView('day')" 
+                  :class="{'bg-white text-brand-600 shadow-sm font-bold': currentView === 'day'}"
+                  class="px-3 py-1.5 rounded-lg transition-all">
+            Giorno
+          </button>
+        </div>
+
+        <!-- Mobile View Dropdown -->
+        <div class="md:hidden">
+          <select v-model="currentView" @change="setView(currentView)" 
+                  class="text-xs font-semibold bg-slate-100 border border-slate-200 rounded-lg px-2 py-1.5 text-slate-700 focus:outline-none">
+            <option value="month">Mese</option>
+            <option value="week">Settimana</option>
+            <option value="day">Giorno</option>
+          </select>
+        </div>
+
+        <!-- Add Event Button -->
+        <button @click="openNewEventModal()" 
+                class="flex items-center space-x-1.5 px-3 sm:px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl shadow-sm hover:shadow font-medium text-xs sm:text-sm transition-all focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+          </svg>
+          <span class="hidden sm:inline">Nuovo Impegno</span>
+          <span class="sm:hidden">Nuovo</span>
+        </button>
+
+        <!-- User Profile Pill & Logout -->
+        <div class="hidden sm:flex items-center space-x-2 pl-2 border-l border-slate-200">
+          <div class="flex items-center space-x-1.5 bg-slate-100 py-1.5 px-2.5 rounded-xl text-xs font-semibold text-slate-700">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span class="max-w-[100px] truncate" :title="currentUser">{{ currentUser }}</span>
+          </div>
+          <button @click="logoutUser" 
+                  class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                  title="Cambia Utente / Esci">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Mobile Right Sidebar Toggle (To-Do) -->
+        <button @click="isRightDrawerOpen = true" 
+                class="lg:hidden relative p-2 rounded-lg text-slate-600 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                title="Apri To-Do List">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+          </svg>
+          <span v-if="activeTodosCount > 0" 
+                class="absolute top-1 right-1 w-4 h-4 text-[10px] font-bold bg-amber-500 text-white rounded-full flex items-center justify-center">
+            {{ activeTodosCount }}
+          </span>
+        </button>
+
+        <!-- Mobile Logout Icon -->
+        <button @click="logoutUser" 
+                class="sm:hidden p-2 text-slate-500 hover:text-slate-800 focus:outline-none"
+                title="Cambia Utente / Esci">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- MAIN APP WRAPPER (3 COLUMNS) -->
+    <div class="flex-1 flex overflow-hidden relative">
+
+      <!-- ========================================== -->
+      <!-- 1. SIDEBAR SINISTRA: GESTIONE CALENDARI -->
+      <!-- ========================================== -->
+      <!-- Desktop Sidebar -->
+      <aside class="hidden lg:flex flex-col w-72 bg-white border-r border-slate-200 flex-shrink-0 z-10">
+        <!-- Sidebar Header -->
+        <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <h3 class="font-bold text-slate-800 text-sm tracking-wide uppercase">I Miei Calendari</h3>
+            <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-slate-100 text-slate-600">
+              {{ activeCalendarsCount }}/{{ calendars.length }}
+            </span>
+          </div>
+          <button @click="openAddCalendar" 
+                  class="p-1.5 text-brand-600 hover:text-brand-700 hover:bg-brand-50 rounded-lg transition-colors"
+                  title="Crea nuovo calendario">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Quick Filters: Tutti / Nessuno -->
+        <div class="px-4 py-2 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between text-xs text-slate-500">
+          <span>Sovrapposizione:</span>
+          <div class="space-x-2">
+            <button @click="setAllCalendars(true)" class="hover:text-brand-600 font-medium">Tutti</button>
+            <span>•</span>
+            <button @click="setAllCalendars(false)" class="hover:text-brand-600 font-medium">Nessuno</button>
+          </div>
+        </div>
+
+        <!-- Calendar List -->
+        <div class="flex-1 overflow-y-auto p-3 space-y-1.5">
+          <div v-for="cal in calendars" :key="cal.id" 
+               class="group flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-all">
+            <!-- Left: Checkbox & Name -->
+            <label class="flex items-center space-x-3 cursor-pointer select-none flex-1 min-w-0 pr-2">
+              <input type="checkbox" 
+                     :checked="cal.isVisible" 
+                     @change="toggleCalendarVisibility(cal.id)"
+                     class="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 border-slate-300 cursor-pointer">
+              <!-- Color Dot -->
+              <span class="w-3.5 h-3.5 rounded-full flex-shrink-0 shadow-sm" :style="{ backgroundColor: cal.color }"></span>
+              <!-- Name -->
+              <span class="text-sm font-medium text-slate-700 truncate group-hover:text-slate-900" :title="cal.name">
+                {{ cal.name }}
+              </span>
+            </label>
+
+            <!-- Right: Event Counter & Actions -->
+            <div class="flex items-center space-x-1 flex-shrink-0">
+              <span class="text-xs font-medium text-slate-400 group-hover:hidden px-1">
+                {{ getCalendarEventCount(cal.id) }}
+              </span>
+              <!-- Edit Button -->
+              <button @click="openEditCalendar(cal, $event)" 
+                      class="hidden group-hover:inline-flex p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded transition-colors"
+                      title="Modifica calendario">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </button>
+              <!-- Delete Button -->
+              <button @click="promptDeleteCalendar(cal, $event)" 
+                      class="hidden group-hover:inline-flex p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                      title="Elimina calendario">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sidebar Footer Note & Reset -->
+        <div class="p-3 bg-slate-50 border-t border-slate-100 text-xs text-slate-500 space-y-2">
+          <p class="leading-relaxed">
+            Spunta i calendari per <strong>sovrapporli</strong> al centro. Gli impegni si aggiornano automaticamente.
+          </p>
+          <div class="pt-1 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+            <span class="text-slate-400">Dati salvati in locale</span>
+            <button @click="resetData" class="text-slate-500 hover:text-brand-600 font-medium underline transition-colors">
+              Ripristina dati demo
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Mobile Offcanvas Left Sidebar (Drawer) -->
+      <div v-if="isLeftDrawerOpen" 
+           class="lg:hidden fixed inset-0 z-40 flex">
+        <!-- Backdrop -->
+        <div @click="isLeftDrawerOpen = false" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity"></div>
+        <!-- Drawer Content -->
+        <div class="relative flex-1 flex flex-col max-w-xs w-full bg-white shadow-2xl z-50">
+          <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="font-bold text-slate-800 text-base">Gestione Calendari</h3>
+            <button @click="isLeftDrawerOpen = false" class="p-2 text-slate-500 hover:bg-slate-100 rounded-lg">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+            <button @click="openAddCalendar" 
+                    class="w-full flex items-center justify-center space-x-2 py-2 px-3 bg-brand-50 text-brand-600 rounded-xl font-semibold text-sm hover:bg-brand-100 transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+              </svg>
+              <span>Nuovo Calendario</span>
+            </button>
+          </div>
+
+          <div class="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <span>Visibilità:</span>
+            <div class="space-x-2">
+              <button @click="setAllCalendars(true)" class="hover:text-brand-600 font-medium">Tutti</button>
+              <span>•</span>
+              <button @click="setAllCalendars(false)" class="hover:text-brand-600 font-medium">Nessuno</button>
+            </div>
+          </div>
+
+          <div class="flex-1 overflow-y-auto p-4 space-y-2">
+            <div v-for="cal in calendars" :key="cal.id" 
+                 class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <label class="flex items-center space-x-3 cursor-pointer select-none flex-1 min-w-0 pr-2">
+                <input type="checkbox" 
+                       :checked="cal.isVisible" 
+                       @change="toggleCalendarVisibility(cal.id)"
+                       class="w-5 h-5 rounded text-brand-600 focus:ring-brand-500 border-slate-300">
+                <span class="w-4 h-4 rounded-full flex-shrink-0" :style="{ backgroundColor: cal.color }"></span>
+                <span class="text-sm font-semibold text-slate-800 truncate">{{ cal.name }}</span>
+              </label>
+              <div class="flex items-center space-x-1">
+                <button @click="openEditCalendar(cal, $event)" class="p-1.5 text-slate-500 hover:text-slate-800">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
+                <button @click="promptDeleteCalendar(cal, $event)" class="p-1.5 text-slate-500 hover:text-rose-600">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ========================================== -->
+      <!-- 2. SEZIONE CENTRALE: CALENDARIO PRINCIPALE -->
+      <!-- ========================================== -->
+      <main class="flex-1 flex flex-col bg-white overflow-hidden min-w-0">
+
+        <!-- A) VISTA MENSILE -->
+        <div v-if="currentView === 'month'" class="flex-1 flex flex-col overflow-hidden">
+          <!-- Weekday Headers (Lunedì, Martedì...) -->
+          <div class="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-xs font-bold text-slate-600 py-2.5 flex-shrink-0">
+            <div v-for="(dayName, idx) in ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica']" :key="idx">
+              <span class="hidden sm:inline">{{ dayName }}</span>
+              <span class="sm:hidden">{{ ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'][idx] }}</span>
+            </div>
+          </div>
+
+          <!-- Month Grid Cells -->
+          <div class="flex-1 overflow-y-auto grid grid-cols-7 auto-rows-fr divide-x divide-y divide-slate-100 bg-slate-100">
+            <div v-for="cell in monthDays" :key="cell.dateKey" 
+                 @click="openNewEventModal(cell.dateKey)"
+                 :class="[
+                   cell.isCurrentMonth ? 'bg-white' : 'bg-slate-50/60 text-slate-400',
+                   cell.isToday ? 'ring-2 ring-inset ring-brand-500/40 bg-brand-50/20' : ''
+                 ]"
+                 class="min-h-[95px] sm:min-h-[115px] p-1.5 sm:p-2 flex flex-col hover:bg-slate-50/90 transition-colors cursor-pointer group">
+              
+              <!-- Date Number Header with Day Name -->
+              <div class="flex items-center justify-between mb-1">
+                <span :class="[
+                  cell.isToday ? 'bg-brand-600 text-white font-bold px-2 py-0.5 rounded-full text-xs shadow-sm' : 'text-xs font-semibold text-slate-700 group-hover:text-brand-600'
+                ]">
+                  {{ cell.dayNumber }}
+                </span>
+                <span v-if="eventsByDate[cell.dateKey]?.length" class="text-[10px] font-bold text-slate-400 hidden sm:inline">
+                  {{ eventsByDate[cell.dateKey].length }} {{ eventsByDate[cell.dateKey].length === 1 ? 'evento' : 'eventi' }}
+                </span>
+              </div>
+
+              <!-- Events List for this Day -->
+              <div class="flex-1 space-y-1 overflow-y-auto max-h-[85px] sm:max-h-[105px]">
+                <div v-for="evt in eventsByDate[cell.dateKey]" :key="evt.id" 
+                     @click.stop="openEditEventModal(evt, $event)"
+                     :style="{ 
+                       backgroundColor: (calendarMap[evt.calendarId]?.color || '#4f46e5') + '22',
+                       borderLeftColor: calendarMap[evt.calendarId]?.color || '#4f46e5'
+                     }"
+                     class="event-chip text-[11px] sm:text-xs px-1.5 py-0.5 rounded-md border-l-[3px] font-medium text-slate-800 truncate shadow-xs flex items-center space-x-1 cursor-pointer"
+                     :title="evt.title + ' (' + evt.startTime + ' - ' + evt.endTime + ')'">
+                  <span class="font-semibold text-[10px] opacity-75">{{ evt.startTime }}</span>
+                  <span class="truncate">{{ evt.title }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+        <!-- B) VISTA SETTIMANALE -->
+        <div v-if="currentView === 'week'" class="flex-1 flex flex-col overflow-hidden">
+          <!-- Weekday Headers with Clear Day Name + Number (es. "Lunedì 15") -->
+          <div class="flex border-b border-slate-200 bg-slate-50 flex-shrink-0">
+            <!-- Hour label column spacer -->
+            <div class="w-14 sm:w-16 flex-shrink-0 border-r border-slate-200 p-2 text-center text-xs text-slate-400 font-semibold">
+              Ora
+            </div>
+            <!-- 7 Days Columns -->
+            <div class="flex-1 grid grid-cols-7 divide-x divide-slate-200">
+              <div v-for="day in weekDays" :key="day.dateKey" 
+                   :class="{'bg-brand-50/40': day.isToday}"
+                   class="p-2 text-center">
+                <div class="text-xs font-medium text-slate-500 uppercase">{{ day.dayName }}</div>
+                <div :class="[
+                  day.isToday ? 'bg-brand-600 text-white font-bold w-7 h-7 mx-auto rounded-full flex items-center justify-center shadow-sm text-sm' : 'text-sm font-bold text-slate-800'
+                ]">
+                  {{ day.dayNumber }}
+                </div>
+                <div class="text-[11px] text-slate-400 font-medium hidden sm:block">
+                  {{ day.headerLabel }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hourly Grid Scroll Area -->
+          <div class="flex-1 overflow-y-auto time-grid-scroll flex relative bg-white">
+            <!-- Left Time Column -->
+            <div class="w-14 sm:w-16 flex-shrink-0 border-r border-slate-200 bg-slate-50/50 select-none">
+              <div v-for="h in hoursList" :key="h" 
+                   class="h-[60px] text-[11px] text-slate-400 font-semibold pr-2 text-right pt-0 relative -top-2">
+                {{ h }}
+              </div>
+            </div>
+
+            <!-- 7 Day Columns Grid -->
+            <div class="flex-1 grid grid-cols-7 divide-x divide-slate-100 relative">
+              <div v-for="day in weekDays" :key="day.dateKey" 
+                   class="relative"
+                   :class="{'bg-brand-50/10': day.isToday}">
+                
+                <!-- Hour slot row dividers (clickable to add event) -->
+                <div v-for="h in hoursList" :key="h" 
+                     @click="openNewEventModal(day.dateKey, h)"
+                     class="h-[60px] border-b border-slate-100 hover:bg-slate-50/80 cursor-pointer transition-colors">
+                </div>
+
+                <!-- Positioned Events in this column -->
+                <div v-for="evt in (eventsByDate[day.dateKey] || [])" :key="evt.id" 
+                     @click.stop="openEditEventModal(evt, $event)"
+                     :style="getEventStyle(evt)"
+                     class="absolute left-1 right-1 rounded-md p-1.5 text-xs shadow-sm hover:shadow-md cursor-pointer transition-all overflow-hidden z-10 flex flex-col justify-start">
+                  <div class="font-bold truncate text-[11px] sm:text-xs">{{ evt.title }}</div>
+                  <div class="text-[10px] font-semibold opacity-80">{{ evt.startTime }} - {{ evt.endTime }}</div>
+                  <div v-if="evt.notes" class="text-[10px] text-slate-600 truncate mt-0.5 hidden sm:block">{{ evt.notes }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+        <!-- C) VISTA GIORNALIERA -->
+        <div v-if="currentView === 'day'" class="flex-1 flex flex-col overflow-hidden">
+          <!-- Day Header -->
+          <div class="p-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between flex-shrink-0">
+            <div>
+              <span class="text-xs font-semibold text-slate-500 uppercase">Vista Giornaliera</span>
+              <h3 class="text-base sm:text-xl font-bold text-slate-800">
+                {{ viewTitle }}
+              </h3>
+            </div>
+            <div class="text-xs text-slate-500 font-medium">
+              {{ dayViewEvents.length }} {{ dayViewEvents.length === 1 ? 'impegno programmato' : 'impegni programmati' }}
+            </div>
+          </div>
+
+          <!-- Day Hourly Grid -->
+          <div class="flex-1 overflow-y-auto time-grid-scroll flex relative bg-white">
+            <!-- Left Time Column -->
+            <div class="w-16 sm:w-20 flex-shrink-0 border-r border-slate-200 bg-slate-50/50 select-none">
+              <div v-for="h in hoursList" :key="h" 
+                   class="h-[60px] text-xs text-slate-400 font-semibold pr-3 text-right relative -top-2">
+                {{ h }}
+              </div>
+            </div>
+
+            <!-- Single Day Column Grid -->
+            <div class="flex-1 relative">
+              <!-- Hour background slots -->
+              <div v-for="h in hoursList" :key="h" 
+                   @click="openNewEventModal(toDateKey(currentDate), h)"
+                   class="h-[60px] border-b border-slate-100 hover:bg-slate-50/60 cursor-pointer transition-colors flex items-center px-4">
+                <span class="text-xs text-slate-300 opacity-0 hover:opacity-100 select-none">+ Clicca per aggiungere impegno alle {{ h }}</span>
+              </div>
+
+              <!-- Positioned Event Cards -->
+              <div v-for="evt in dayViewEvents" :key="evt.id" 
+                   @click.stop="openEditEventModal(evt, $event)"
+                   :style="getEventStyle(evt)"
+                   class="absolute left-3 right-3 sm:left-6 sm:right-6 rounded-xl p-3 text-xs sm:text-sm shadow-sm hover:shadow-lg cursor-pointer transition-all overflow-hidden z-10 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center justify-between">
+                    <h4 class="font-bold text-slate-900 text-sm sm:text-base">{{ evt.title }}</h4>
+                    <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/70 shadow-xs" 
+                          :style="{ color: calendarMap[evt.calendarId]?.color }">
+                      {{ calendarMap[evt.calendarId]?.name || 'Calendario' }}
+                    </span>
+                  </div>
+                  <p class="text-xs font-medium text-slate-600 mt-1">
+                    🕒 {{ evt.startTime }} - {{ evt.endTime }}
+                  </p>
+                  <p v-if="evt.notes" class="text-xs text-slate-700 mt-2 bg-white/50 p-2 rounded-lg">
+                    {{ evt.notes }}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </main>
+
+
+      <!-- ========================================== -->
+      <!-- 3. SIDEBAR DESTRA: TO-DO LIST -->
+      <!-- ========================================== -->
+      <!-- Desktop Sidebar -->
+      <aside class="hidden lg:flex flex-col w-80 bg-white border-l border-slate-200 flex-shrink-0 z-10">
+        <!-- Sidebar Header -->
+        <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <h3 class="font-bold text-slate-800 text-sm tracking-wide uppercase">To-Do List</h3>
+            <span class="px-2 py-0.5 text-xs font-bold rounded-full bg-brand-50 text-brand-700">
+              {{ activeTodosCount }} da fare
+            </span>
+          </div>
+        </div>
+
+        <!-- Add To-Do Input -->
+        <div class="p-3 border-b border-slate-100">
+          <form @submit.prevent="addTodo" class="flex items-center space-x-2">
+            <input type="text" 
+                   v-model="newTodoText"
+                   placeholder="Aggiungi una nuova attività..." 
+                   class="flex-1 text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all">
+            <button type="submit" 
+                    :disabled="!newTodoText.trim()"
+                    class="p-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white rounded-xl shadow-sm transition-all focus:outline-none">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+              </svg>
+            </button>
+          </form>
+        </div>
+
+        <!-- Filter Tabs -->
+        <div class="px-3 py-2 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between text-xs">
+          <div class="flex space-x-1">
+            <button @click="todoFilter = 'all'" 
+                    :class="{'font-bold text-brand-600 bg-white shadow-xs': todoFilter === 'all', 'text-slate-500 hover:text-slate-800': todoFilter !== 'all'}"
+                    class="px-2.5 py-1 rounded-lg transition-colors">Tutte</button>
+            <button @click="todoFilter = 'active'" 
+                    :class="{'font-bold text-brand-600 bg-white shadow-xs': todoFilter === 'active', 'text-slate-500 hover:text-slate-800': todoFilter !== 'active'}"
+                    class="px-2.5 py-1 rounded-lg transition-colors">Da fare</button>
+            <button @click="todoFilter = 'completed'" 
+                    :class="{'font-bold text-brand-600 bg-white shadow-xs': todoFilter === 'completed', 'text-slate-500 hover:text-slate-800': todoFilter !== 'completed'}"
+                    class="px-2.5 py-1 rounded-lg transition-colors">Fatte</button>
+          </div>
+          <button v-if="todos.some(t => t.completed)" 
+                  @click="clearCompletedTodos" 
+                  class="text-[11px] text-slate-400 hover:text-rose-600 transition-colors">
+            Pulisci fatte
+          </button>
+        </div>
+
+        <!-- To-Do Items List -->
+        <div class="flex-1 overflow-y-auto p-3 space-y-2">
+          <div v-if="filteredTodos.length === 0" class="text-center py-12 text-slate-400">
+            <svg class="w-10 h-10 mx-auto mb-2 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            <p class="text-xs">Nessuna attività in questo elenco</p>
+          </div>
+
+          <div v-for="todo in filteredTodos" :key="todo.id" 
+               class="group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100/80 border border-slate-100 hover:border-slate-200 transition-all">
+            <!-- Checkbox & Text -->
+            <label class="flex items-center space-x-3 cursor-pointer select-none flex-1 min-w-0 pr-2">
+              <input type="checkbox" 
+                     :checked="todo.completed" 
+                     @change="toggleTodo(todo.id)"
+                     class="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 border-slate-300 cursor-pointer">
+              <span :class="{'task-completed text-slate-400': todo.completed, 'text-slate-700': !todo.completed}" 
+                    class="text-sm font-medium break-words">
+                {{ todo.title }}
+              </span>
+            </label>
+
+            <!-- Delete Button -->
+            <button @click="deleteTodo(todo.id)" 
+                    class="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all"
+                    title="Elimina attività">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Mobile Offcanvas Right Sidebar (Drawer) -->
+      <div v-if="isRightDrawerOpen" 
+           class="lg:hidden fixed inset-0 z-40 flex justify-end">
+        <!-- Backdrop -->
+        <div @click="isRightDrawerOpen = false" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity"></div>
+        <!-- Drawer Content -->
+        <div class="relative flex-1 flex flex-col max-w-xs w-full bg-white shadow-2xl z-50">
+          <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="font-bold text-slate-800 text-base">To-Do List Extra</h3>
+            <button @click="isRightDrawerOpen = false" class="p-2 text-slate-500 hover:bg-slate-100 rounded-lg">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <!-- Mobile Add Todo Form -->
+          <div class="p-4 border-b border-slate-100">
+            <form @submit.prevent="addTodo" class="flex items-center space-x-2">
+              <input type="text" 
+                     v-model="newTodoText"
+                     placeholder="Aggiungi attività..." 
+                     class="flex-1 text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500">
+              <button type="submit" 
+                      :disabled="!newTodoText.trim()"
+                      class="p-2 bg-brand-600 text-white rounded-xl">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+              </button>
+            </form>
+          </div>
+
+          <!-- Mobile Filters -->
+          <div class="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-xs">
+            <div class="flex space-x-1">
+              <button @click="todoFilter = 'all'" :class="{'font-bold text-brand-600': todoFilter === 'all'}" class="px-2 py-1">Tutte</button>
+              <button @click="todoFilter = 'active'" :class="{'font-bold text-brand-600': todoFilter === 'active'}" class="px-2 py-1">Da fare</button>
+              <button @click="todoFilter = 'completed'" :class="{'font-bold text-brand-600': todoFilter === 'completed'}" class="px-2 py-1">Fatte</button>
+            </div>
+            <button v-if="todos.some(t => t.completed)" @click="clearCompletedTodos" class="text-rose-600 text-[11px]">Pulisci</button>
+          </div>
+
+          <!-- Mobile Items List -->
+          <div class="flex-1 overflow-y-auto p-4 space-y-2">
+            <div v-for="todo in filteredTodos" :key="todo.id" 
+                 class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <label class="flex items-center space-x-3 cursor-pointer flex-1 min-w-0 pr-2">
+                <input type="checkbox" 
+                       :checked="todo.completed" 
+                       @change="toggleTodo(todo.id)"
+                       class="w-5 h-5 rounded text-brand-600">
+                <span :class="{'task-completed text-slate-400': todo.completed, 'text-slate-800': !todo.completed}" 
+                      class="text-sm font-medium break-words">
+                  {{ todo.title }}
+                </span>
+              </label>
+              <button @click="deleteTodo(todo.id)" class="p-1.5 text-slate-400 hover:text-rose-600">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- MODALE: CREA / MODIFICA EVENTO (IMPEGNO) -->
+    <!-- ========================================== -->
+    <div v-if="showEventModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div @click="showEventModal = false" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
+
+      <div class="relative bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl z-10">
+        <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+          <h3 class="text-lg font-bold text-slate-800">
+            {{ isEditingEvent ? 'Modifica Impegno' : 'Nuovo Impegno' }}
+          </h3>
+          <button @click="showEventModal = false" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <form @submit.prevent="saveEvent" class="mt-4 space-y-4">
+          <!-- Titolo Impegno -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Titolo / Nome</label>
+            <input type="text" 
+                   v-model="eventForm.title" 
+                   required
+                   placeholder="es. Riunione di progetto, Visita, Palestra..."
+                   class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white">
+          </div>
+
+          <!-- Calendario di appartenenza -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Calendario</label>
+            <select v-model="eventForm.calendarId" 
+                    required
+                    class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white">
+              <option v-for="cal in calendars" :key="cal.id" :value="cal.id">
+                {{ cal.name }}
+              </option>
+            </select>
+          </div>
+
+          <!-- Data -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Data</label>
+            <input type="date" 
+                   v-model="eventForm.date" 
+                   required
+                   class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white">
+          </div>
+
+          <!-- Orari di Inizio e Fine -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Ora Inizio</label>
+              <input type="time" 
+                     v-model="eventForm.startTime" 
+                     required
+                     class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Ora Fine</label>
+              <input type="time" 
+                     v-model="eventForm.endTime" 
+                     required
+                     class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white">
+            </div>
+          </div>
+
+          <!-- Note aggiuntive -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Note (facoltative)</label>
+            <textarea v-model="eventForm.notes" 
+                      rows="2"
+                      placeholder="Dettagli, link meeting, appunti..."
+                      class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white"></textarea>
+          </div>
+
+          <!-- Form Actions -->
+          <div class="pt-3 flex items-center justify-between border-t border-slate-100">
+            <button v-if="isEditingEvent" 
+                    type="button" 
+                    @click="deleteEvent(eventForm.id)" 
+                    class="px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors">
+              Elimina
+            </button>
+            <span v-else></span>
+
+            <div class="flex items-center space-x-2">
+              <button type="button" 
+                      @click="showEventModal = false" 
+                      class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+                Annulla
+              </button>
+              <button type="submit" 
+                      class="px-5 py-2 text-sm font-bold bg-brand-600 hover:bg-brand-700 text-white rounded-xl shadow-md transition-all">
+                Salva
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- MODALE: CREA / MODIFICA CALENDARIO -->
+    <!-- ========================================== -->
+    <div v-if="showCalendarModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div @click="showCalendarModal = false" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
+
+      <div class="relative bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl z-10">
+        <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+          <h3 class="text-lg font-bold text-slate-800">
+            {{ isEditingCalendar ? 'Modifica Calendario' : 'Nuovo Calendario' }}
+          </h3>
+          <button @click="showCalendarModal = false" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <form @submit.prevent="saveCalendar" class="mt-4 space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Nome Calendario</label>
+            <input type="text" 
+                   v-model="calendarForm.name" 
+                   required
+                   placeholder="es. Progetti Clienti, Hobby, Famiglia..."
+                   class="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white">
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Colore Assegnato</label>
+            <!-- Preset Palette Swatches -->
+            <div class="grid grid-cols-5 gap-2.5">
+              <button type="button" 
+                      v-for="color in presetColors" 
+                      :key="color.value"
+                      @click="calendarForm.color = color.value"
+                      :style="{ backgroundColor: color.value }"
+                      :class="{'ring-3 ring-offset-2 ring-slate-800 scale-105': calendarForm.color === color.value}"
+                      class="h-9 rounded-xl transition-transform flex items-center justify-center text-white"
+                      :title="color.name">
+                <svg v-if="calendarForm.color === color.value" class="w-4 h-4 stroke-[3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </button>
+            </div>
+            <!-- Custom Hex Input -->
+            <div class="mt-3 flex items-center space-x-2">
+              <input type="color" v-model="calendarForm.color" class="w-9 h-9 p-0.5 rounded-lg border border-slate-200 cursor-pointer">
+              <input type="text" v-model="calendarForm.color" class="flex-1 text-xs font-mono uppercase bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700">
+            </div>
+          </div>
+
+          <div class="pt-4 flex items-center justify-end space-x-2 border-t border-slate-100">
+            <button type="button" 
+                    @click="showCalendarModal = false" 
+                    class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+              Annulla
+            </button>
+            <button type="submit" 
+                    class="px-5 py-2 text-sm font-bold bg-brand-600 hover:bg-brand-700 text-white rounded-xl shadow-md transition-all">
+              {{ isEditingCalendar ? 'Aggiorna' : 'Crea Calendario' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- MODALE: CONFERMA ELIMINAZIONE CALENDARIO -->
+    <!-- ========================================== -->
+    <div v-if="showDeleteCalendarModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div @click="showDeleteCalendarModal = false" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
+
+      <div class="relative bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl z-10">
+        <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+
+        <h3 class="text-center text-lg font-bold text-slate-900">Elimina Calendario</h3>
+        <p class="text-center text-xs sm:text-sm text-slate-500 mt-2">
+          Sei sicuro di voler eliminare <strong>"{{ calendarToDelete?.name }}"</strong>? Tutti gli impegni associati verranno rimossi definitivamente.
+        </p>
+
+        <div class="mt-6 flex space-x-2">
+          <button @click="showDeleteCalendarModal = false" 
+                  class="flex-1 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">
+            Annulla
+          </button>
+          <button @click="confirmDeleteCalendar" 
+                  class="flex-1 px-4 py-2 text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-md transition-colors">
+            Elimina
+          </button>
+        </div>
+      </div>
+    </div>
+
+    </div> <!-- Chiusura div v-if="isUserLoggedIn" -->
+
+  </div> <!-- Chiusura div id="app" -->
+
+  <!-- Scripts -->
+  <script src="js/calendar-utils.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
