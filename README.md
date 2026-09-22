@@ -22,6 +22,12 @@ Web App completa, moderna e responsive per la gestione del tempo, dei calendari 
   - Campi: Titolo, Calendario di appartenenza, Data, Orario Inizio, Orario Fine, Note.
   - Colori dinamici ereditati dal calendario selezionato.
   - Clic su un evento esistente per rinominarlo, modificare gli orari, spostarlo di giorno o eliminarlo.
+- **🔁 Ripetizione Rapida Eventi (Copia-Incolla Settimanale)**:
+  - Pulsante *"Copia Impegni"* nella barra superiore per attivare la modalità di selezione multipla.
+  - Clicca su uno o più impegni nel calendario per evidenziarli con il badge di spunta.
+  - Clicca *"Ripeti Eventi"* per aprire il popup e scegliere per quante settimane successive duplicarli (es. 1, 2, 4, 8 o 12 settimane).
+  - Il sistema calcola automaticamente le date future (aggiungendo blocchi di 7 giorni) preservando orari, calendario e giorno della settimana.
+  - Salvataggio automatico e aggiornamento istantaneo del calendario.
 
 ### 3. ✅ Sidebar Destra (To-Do List Indipendente)
 - Bacheca autonoma per attività non vincolate a un orario specifico.

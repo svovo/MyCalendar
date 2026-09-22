@@ -225,6 +225,22 @@
           </select>
         </div>
 
+        <!-- Copy Events Button -->
+        <button @click="toggleCopyMode" 
+                :class="isCopyMode ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'"
+                class="flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all focus:outline-none"
+                title="Seleziona e duplica impegni sulle settimane successive">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+          </svg>
+          <span class="hidden sm:inline">{{ isCopyMode ? 'Modalità Copia' : 'Copia Impegni' }}</span>
+          <span class="sm:hidden">Copia</span>
+          <span v-if="isCopyMode && selectedEventIds.length > 0" 
+                class="ml-1 px-1.5 py-0.2 bg-white text-indigo-700 rounded-full text-[10px] font-extrabold">
+            {{ selectedEventIds.length }}
+          </span>
+        </button>
+
         <!-- Add Event Button -->
         <button @click="openNewEventModal()" 
                 class="flex items-center space-x-1.5 px-3 sm:px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl shadow-sm hover:shadow font-medium text-xs sm:text-sm transition-all focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2">
@@ -273,6 +289,45 @@
         </button>
       </div>
     </header>
+
+    <!-- BANNER MODALITÀ COPIA ATTIVA -->
+    <div v-if="isCopyMode" 
+         class="copy-banner-enter bg-indigo-600 text-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-md z-20 text-xs sm:text-sm flex-shrink-0">
+      <div class="flex items-center space-x-2">
+        <span class="p-1 rounded bg-white/20">📋</span>
+        <span class="font-medium">
+          <strong>Modalità Copia:</strong> Clicca sugli eventi nel calendario per selezionarli.
+        </span>
+        <span class="px-2 py-0.5 rounded-full bg-white text-indigo-700 font-bold text-xs">
+          {{ selectedEventIds.length }} {{ selectedEventIds.length === 1 ? 'selezionato' : 'selezionati' }}
+        </span>
+      </div>
+
+      <div class="flex items-center space-x-2">
+        <button v-if="filteredEvents.length > 0" 
+                @click="selectAllVisibleEvents" 
+                class="px-2.5 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-xs font-semibold transition-colors">
+          Seleziona tutti
+        </button>
+        <button v-if="selectedEventIds.length > 0" 
+                @click="clearEventSelection" 
+                class="px-2.5 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-xs font-semibold transition-colors">
+          Deseleziona
+        </button>
+        <!-- Pulsante Ripeti Eventi -->
+        <button @click="openRepeatModal" 
+                :disabled="selectedEventIds.length === 0"
+                class="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs sm:text-sm shadow-sm transition-all flex items-center space-x-1.5">
+          <span>🔁 Ripeti Eventi</span>
+          <span v-if="selectedEventIds.length > 0">({{ selectedEventIds.length }})</span>
+        </button>
+        <!-- Annulla ed esci -->
+        <button @click="cancelCopyMode" 
+                class="px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-semibold transition-colors">
+          ✕ Chiudi
+        </button>
+      </div>
+    </div>
 
     <!-- MAIN APP WRAPPER (3 COLUMNS) -->
     <div class="flex-1 flex overflow-hidden relative">
@@ -470,13 +525,18 @@
               <!-- Events List for this Day -->
               <div class="flex-1 space-y-1 overflow-y-auto max-h-[85px] sm:max-h-[105px]">
                 <div v-for="evt in eventsByDate[cell.dateKey]" :key="evt.id" 
-                     @click.stop="openEditEventModal(evt, $event)"
+                     @click.stop="handleEventClick(evt, $event)"
                      :style="{ 
                        backgroundColor: (calendarMap[evt.calendarId]?.color || '#4f46e5') + '22',
                        borderLeftColor: calendarMap[evt.calendarId]?.color || '#4f46e5'
                      }"
+                     :class="{
+                       'event-chip-selected': selectedEventIds.includes(evt.id),
+                       'event-chip-selectable ring-1 ring-brand-300': isCopyMode
+                     }"
                      class="event-chip text-[11px] sm:text-xs px-1.5 py-0.5 rounded-md border-l-[3px] font-medium text-slate-800 truncate shadow-xs flex items-center space-x-1 cursor-pointer"
                      :title="evt.title + ' (' + evt.startTime + ' - ' + evt.endTime + ')'">
+                  <span v-if="selectedEventIds.includes(evt.id)" class="text-[9px] font-bold text-white bg-indigo-600 rounded-full w-3.5 h-3.5 flex items-center justify-center flex-shrink-0">✓</span>
                   <span class="font-semibold text-[10px] opacity-75">{{ evt.startTime }}</span>
                   <span class="truncate">{{ evt.title }}</span>
                 </div>
@@ -536,10 +596,17 @@
 
                 <!-- Positioned Events in this column -->
                 <div v-for="evt in (eventsByDate[day.dateKey] || [])" :key="evt.id" 
-                     @click.stop="openEditEventModal(evt, $event)"
+                     @click.stop="handleEventClick(evt, $event)"
                      :style="getEventStyle(evt)"
+                     :class="{
+                       'event-chip-selected': selectedEventIds.includes(evt.id),
+                       'event-chip-selectable ring-1 ring-brand-300': isCopyMode
+                     }"
                      class="absolute left-1 right-1 rounded-md p-1.5 text-xs shadow-sm hover:shadow-md cursor-pointer transition-all overflow-hidden z-10 flex flex-col justify-start">
-                  <div class="font-bold truncate text-[11px] sm:text-xs">{{ evt.title }}</div>
+                  <div class="flex items-center space-x-1">
+                    <span v-if="selectedEventIds.includes(evt.id)" class="text-[9px] font-bold text-white bg-indigo-600 rounded-full w-3.5 h-3.5 flex items-center justify-center flex-shrink-0">✓</span>
+                    <span class="font-bold truncate text-[11px] sm:text-xs">{{ evt.title }}</span>
+                  </div>
                   <div class="text-[10px] font-semibold opacity-80">{{ evt.startTime }} - {{ evt.endTime }}</div>
                   <div v-if="evt.notes" class="text-[10px] text-slate-600 truncate mt-0.5 hidden sm:block">{{ evt.notes }}</div>
                 </div>
@@ -585,13 +652,20 @@
 
               <!-- Positioned Event Cards -->
               <div v-for="evt in dayViewEvents" :key="evt.id" 
-                   @click.stop="openEditEventModal(evt, $event)"
+                   @click.stop="handleEventClick(evt, $event)"
                    :style="getEventStyle(evt)"
+                   :class="{
+                     'event-chip-selected': selectedEventIds.includes(evt.id),
+                     'event-chip-selectable ring-1 ring-brand-300': isCopyMode
+                   }"
                    class="absolute left-3 right-3 sm:left-6 sm:right-6 rounded-xl p-3 text-xs sm:text-sm shadow-sm hover:shadow-lg cursor-pointer transition-all overflow-hidden z-10 flex flex-col justify-between">
                 <div>
                   <div class="flex items-center justify-between">
-                    <h4 class="font-bold text-slate-900 text-sm sm:text-base">{{ evt.title }}</h4>
-                    <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/70 shadow-xs" 
+                    <div class="flex items-center space-x-2 truncate">
+                      <span v-if="selectedEventIds.includes(evt.id)" class="text-xs font-bold text-white bg-indigo-600 rounded-full px-2 py-0.5 flex items-center space-x-1 shadow-xs">✓ Selezionato</span>
+                      <h4 class="font-bold text-slate-900 text-sm sm:text-base truncate">{{ evt.title }}</h4>
+                    </div>
+                    <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/70 shadow-xs flex-shrink-0" 
                           :style="{ color: calendarMap[evt.calendarId]?.color }">
                       {{ calendarMap[evt.calendarId]?.name || 'Calendario' }}
                     </span>
@@ -969,6 +1043,117 @@
           </button>
         </div>
       </div>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- MODALE: RIPETIZIONE RAPIDA EVENTI SETTIMANALI -->
+    <!-- ========================================== -->
+    <div v-if="showRepeatModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div @click="showRepeatModal = false" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
+
+      <div class="relative bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl z-10 border border-slate-100">
+        <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-lg shadow-xs">
+              🔁
+            </div>
+            <div>
+              <h3 class="text-lg font-bold text-slate-900">Ripeti Impegni Settimanali</h3>
+              <p class="text-xs text-slate-500">Copia-Incolla automatico sulle settimane successive</p>
+            </div>
+          </div>
+          <button @click="showRepeatModal = false" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Elenco eventi selezionati -->
+        <div class="mt-4">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              {{ selectedEventIds.length }} {{ selectedEventIds.length === 1 ? 'impegno selezionato' : 'impegni selezionati' }}
+            </span>
+          </div>
+          <div class="max-h-36 overflow-y-auto space-y-1.5 p-2 bg-slate-50 rounded-2xl border border-slate-100">
+            <div v-for="evt in selectedEvents" :key="evt.id" 
+                 class="flex items-center justify-between text-xs py-1.5 px-2.5 bg-white rounded-xl shadow-xs border border-slate-100">
+              <div class="flex items-center space-x-2 truncate pr-2">
+                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-xs" :style="{ backgroundColor: calendarMap[evt.calendarId]?.color || '#4f46e5' }"></span>
+                <span class="font-semibold text-slate-800 truncate">{{ evt.title }}</span>
+              </div>
+              <span class="text-slate-500 text-[11px] whitespace-nowrap font-medium">
+                {{ evt.date }} • {{ evt.startTime }}-{{ evt.endTime }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Configurazione settimane -->
+        <div class="mt-5 space-y-3">
+          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+            Per quante settimane successive vuoi incollare questi impegni?
+          </label>
+
+          <div class="flex items-center space-x-3">
+            <input type="number" 
+                   v-model.number="repeatWeeks" 
+                   min="1" 
+                   max="52" 
+                   class="w-24 text-center text-xl font-extrabold bg-slate-50 border-2 border-slate-200 focus:border-indigo-600 rounded-2xl py-2 text-slate-800 focus:outline-none focus:bg-white shadow-xs">
+            <span class="text-sm font-semibold text-slate-600">
+              {{ repeatWeeks === 1 ? 'settimana successiva' : 'settimane successive' }}
+            </span>
+          </div>
+
+          <!-- Quick preset buttons -->
+          <div class="flex flex-wrap gap-2 pt-1">
+            <button v-for="w in [1, 2, 4, 8, 12]" :key="w" 
+                    type="button" 
+                    @click="repeatWeeks = w"
+                    :class="repeatWeeks === w ? 'bg-indigo-600 text-white font-bold shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium'"
+                    class="px-3 py-1.5 rounded-xl text-xs transition-colors">
+              +{{ w }} {{ w === 1 ? 'settimana' : 'settimane' }}
+            </button>
+          </div>
+
+          <!-- Riepilogo / Preview conteggio -->
+          <div class="p-3 bg-indigo-50/70 border border-indigo-100 rounded-2xl text-xs text-indigo-950 flex items-start space-x-2 mt-2">
+            <span class="text-base">💡</span>
+            <div class="leading-relaxed">
+              Verranno creati in totale <strong>{{ selectedEventIds.length * (repeatWeeks || 1) }} nuovi impegni</strong>, duplicati per ciascuna settimana con gli stessi identici orari, colori e giorni.
+            </div>
+          </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="mt-6 pt-4 flex items-center justify-end space-x-2 border-t border-slate-100">
+          <button type="button" 
+                  @click="showRepeatModal = false" 
+                  class="px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+            Annulla
+          </button>
+          <button type="button" 
+                  @click="executeDuplicateEvents"
+                  :disabled="!repeatWeeks || repeatWeeks < 1"
+                  class="px-6 py-2.5 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl shadow-md transition-all flex items-center space-x-2">
+            <span>Conferma e Duplica</span>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOAST NOTIFICAZIONE -->
+    <div v-if="toastMessage" 
+         class="fixed bottom-6 right-6 z-50 bg-slate-900/95 backdrop-blur-md text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center space-x-3 border border-slate-800 text-xs sm:text-sm">
+      <span class="text-emerald-400 text-base font-bold">✓</span>
+      <span class="font-medium">{{ toastMessage }}</span>
+      <button @click="toastMessage = ''" class="ml-2 text-slate-400 hover:text-white">✕</button>
     </div>
 
     </div> <!-- Chiusura div v-if="isUserLoggedIn" -->

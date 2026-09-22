@@ -46,8 +46,22 @@ const app = createApp({
 
     const activeCalendarsCount = computed(() => activeCalendarIds.value.size);
 
-    // --- Events State ---
+    // --- Events State & Copy/Repeat Mode ---
     const events = ref([]);
+    const isCopyMode = ref(false);
+    const selectedEventIds = ref([]);
+    const showRepeatModal = ref(false);
+    const repeatWeeks = ref(4);
+    const toastMessage = ref('');
+    let toastTimer = null;
+
+    const showToast = (msg) => {
+      toastMessage.value = msg;
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toastMessage.value = '';
+      }, 3500);
+    };
 
     // --- To-Do List State ---
     const todos = ref([]);
@@ -399,6 +413,101 @@ const app = createApp({
       showEventModal.value = false;
     };
 
+    // --- Funzioni di Selezione e Ripetizione / Duplicazione Eventi ---
+    const toggleCopyMode = () => {
+      isCopyMode.value = !isCopyMode.value;
+      if (!isCopyMode.value) {
+        selectedEventIds.value = [];
+      }
+    };
+
+    const cancelCopyMode = () => {
+      isCopyMode.value = false;
+      selectedEventIds.value = [];
+      showRepeatModal.value = false;
+    };
+
+    const toggleEventSelection = (id) => {
+      const idx = selectedEventIds.value.indexOf(id);
+      if (idx > -1) {
+        selectedEventIds.value.splice(idx, 1);
+      } else {
+        selectedEventIds.value.push(id);
+      }
+    };
+
+    const handleEventClick = (evt, event) => {
+      if (event && event.stopPropagation) event.stopPropagation();
+      if (isCopyMode.value) {
+        toggleEventSelection(evt.id);
+      } else {
+        openEditEventModal(evt, event);
+      }
+    };
+
+    const selectAllVisibleEvents = () => {
+      selectedEventIds.value = filteredEvents.value.map(e => e.id);
+    };
+
+    const clearEventSelection = () => {
+      selectedEventIds.value = [];
+    };
+
+    const selectedEvents = computed(() => {
+      const set = new Set(selectedEventIds.value);
+      return events.value.filter(e => set.has(e.id));
+    });
+
+    const openRepeatModal = () => {
+      if (selectedEventIds.value.length === 0) return;
+      repeatWeeks.value = 4;
+      showRepeatModal.value = true;
+    };
+
+    const executeDuplicateEvents = () => {
+      let weeks = parseInt(repeatWeeks.value, 10);
+      if (isNaN(weeks) || weeks < 1) weeks = 1;
+      if (weeks > 52) weeks = 52;
+
+      const targetEvents = selectedEvents.value;
+      if (targetEvents.length === 0) return;
+
+      const newEvents = [];
+
+      targetEvents.forEach(orig => {
+        for (let w = 1; w <= weeks; w++) {
+          // Aggiunge esattamente w * 7 giorni alla data originaria
+          const [y, m, d] = orig.date.split('-').map(Number);
+          const targetDate = new Date(y, m - 1, d);
+          targetDate.setDate(targetDate.getDate() + (w * 7));
+          const newDateKey = CalendarUtils.toDateKey(targetDate);
+
+          newEvents.push({
+            id: AppStore.generateId('evt'),
+            calendarId: orig.calendarId,
+            title: orig.title,
+            date: newDateKey,
+            startTime: orig.startTime,
+            endTime: orig.endTime,
+            notes: orig.notes || ''
+          });
+        }
+      });
+
+      // Integra i nuovi impegni nell'array degli eventi
+      events.value.push(...newEvents);
+
+      // Salva immediatamente
+      triggerAutoSave();
+
+      const totalCreated = newEvents.length;
+      showRepeatModal.value = false;
+      isCopyMode.value = false;
+      selectedEventIds.value = [];
+
+      showToast(`Duplicazione completata! Creati ${totalCreated} nuovi impegni per ${weeks} ${weeks === 1 ? 'settimana' : 'settimane'}.`);
+    };
+
     const getEventStyle = (evt) => {
       const cal = calendarMap.value[evt.calendarId] || { color: '#4f46e5' };
       const startMin = CalendarUtils.timeToMinutes(evt.startTime);
@@ -458,6 +567,18 @@ const app = createApp({
 
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
+        if (showRepeatModal.value) {
+          showRepeatModal.value = false;
+          return;
+        }
+        if (isCopyMode.value && selectedEventIds.value.length > 0) {
+          selectedEventIds.value = [];
+          return;
+        }
+        if (isCopyMode.value) {
+          isCopyMode.value = false;
+          return;
+        }
         if (showEventModal.value) showEventModal.value = false;
         if (showCalendarModal.value) showCalendarModal.value = false;
         if (showDeleteCalendarModal.value) showDeleteCalendarModal.value = false;
@@ -521,6 +642,22 @@ const app = createApp({
       showEventModal,
       isEditingEvent,
       eventForm,
+
+      // Copy / Repeat Events Feature
+      isCopyMode,
+      selectedEventIds,
+      showRepeatModal,
+      repeatWeeks,
+      toastMessage,
+      selectedEvents,
+      toggleCopyMode,
+      cancelCopyMode,
+      toggleEventSelection,
+      handleEventClick,
+      selectAllVisibleEvents,
+      clearEventSelection,
+      openRepeatModal,
+      executeDuplicateEvents,
 
       // Grids
       monthDays,

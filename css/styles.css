@@ -80,3 +80,35 @@
   text-decoration: line-through;
   opacity: 0.6;
 }
+
+/* Copy-Paste / Event selection styling */
+.event-chip-selectable {
+  cursor: pointer;
+  position: relative;
+}
+.event-chip-selectable:hover {
+  outline: 2px dashed #6366f1 !important;
+  outline-offset: 1px;
+}
+.event-chip-selected {
+  outline: 2px solid #4f46e5 !important;
+  outline-offset: 1px !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.35), 0 4px 6px -1px rgba(0, 0, 0, 0.15) !important;
+  transform: scale(1.02);
+  z-index: 30 !important;
+}
+
+/* Floating copy banner animation */
+@keyframes slideDownBanner {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.copy-banner-enter {
+  animation: slideDownBanner 0.2s ease-out forwards;
+}
