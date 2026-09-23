@@ -112,3 +112,42 @@
 .copy-banner-enter {
   animation: slideDownBanner 0.2s ease-out forwards;
 }
+
+/* Drag & Drop Time Blocking Styles */
+.todo-draggable {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.todo-draggable:active {
+  cursor: grabbing;
+}
+.todo-dragging {
+  opacity: 0.45;
+  transform: scale(0.98);
+}
+
+.drag-over-slot {
+  background-color: rgba(99, 102, 241, 0.18) !important;
+  outline: 2px dashed #4f46e5 !important;
+  outline-offset: -2px;
+  position: relative;
+}
+.drag-over-slot::after {
+  content: '📅 Rilascia qui per programmare';
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  font-weight: 700;
+  color: #4338ca;
+  pointer-events: none;
+  z-index: 25;
+}
+
+/* Productivity Chart Bar animation */
+.stat-bar-fill {
+  transition: height 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+

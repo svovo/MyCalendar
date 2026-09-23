@@ -29,19 +29,43 @@ Web App completa, moderna e responsive per la gestione del tempo, dei calendari 
   - Il sistema calcola automaticamente le date future (aggiungendo blocchi di 7 giorni) preservando orari, calendario e giorno della settimana.
   - Salvataggio automatico e aggiornamento istantaneo del calendario.
 
-### 3. ✅ Sidebar Destra (To-Do List Indipendente)
-- Bacheca autonoma per attività non vincolate a un orario specifico.
-- Inserimento rapido tramite tasto Invio o pulsante "+".
-- Checkbox per contrassegnare le attività completate (con testo barrato ed evidenziazione visiva).
-- Filtri: *"Tutte"*, *"Da fare"*, *"Fatte"*.
-- Rimozione selettiva con pulsante cestino o pulizia in blocco delle attività completate.
+### 3. ✅ To-Do List Avanzata con Priorità e Filtri
+- **4 Livelli di Priorità con Bandierine Colorate**:
+  - 🚩 **Urgente** (Rosso - `#ef4444`)
+  - 🟡 **Importante** (Giallo/Ambra - `#f59e0b`)
+  - 🔵 **Non urgente** (Blu - `#3b82f6`, default)
+  - 🟢 **Da fare quando si riesce** (Verde - `#10b981`)
+- **Selettore rapido in creazione**: Assegna la priorità desiderata con un solo clic prima di aggiungere il task.
+- **Cambio priorità al volo**: Clicca sulla bandierina di qualsiasi task per scorrere ciclicamente le priorità.
+- **Barra dei Filtri**:
+  - Filtri stato: *"Tutte"*, *"Da fare"*, *"Fatte"*.
+  - Filtri priorità con badge contatore dinamico per ogni livello.
 
-### 4. 📱 Design Responsive (Desktop & Mobile)
+### 4. 🎯 Drag and Drop per il Time Blocking
+- **Trascinamento Intuitivo**: Ogni task non completato è dotato di grip `:::`, pronto per essere trascinato (`draggable`).
+- **Slot del Calendario Droppable**: Gli slot orari delle viste **Settimana** e **Giorno** (e le celle della vista **Mese**) sono aree di rilascio con feedback visivo interattivo.
+- **Programmazione Automatica**: Rilasciando un task su uno slot:
+  - Viene creato all'istante un nuovo impegno sul calendario per quella data e ora (durata standard di 1 ora).
+  - Il task viene rimosso dalla lista To-Do generica per evitare duplicazioni.
+  - Salvataggio immediato sul profilo utente e notifica toast di conferma.
+- **Tecnologia**: Implementato con l'API nativa **HTML5 Drag and Drop** (zero dipendenze esterne, massima leggerezza, funzionamento offline garantito sia su browser che in Electron). *(Per scenari avanzati di riordinamento interno della lista, librerie consigliate per questo stack: SortableJS / VueDraggable).*
+
+### 5. 📊 Componente Produttività (Statistiche Settimanali)
+- Pulsante dedicato **"📊 Produttività"** nella barra superiore e nella testata della To-Do list.
+- **Metriche Chiave**:
+  1. **Totale task completati negli ultimi 7 giorni**.
+  2. **Giorno di maggiore produttività** (il giorno della settimana con il picco di completamenti).
+- **Grafico a Barre Reattivo**:
+  - 7 barre proporzionali che mostrano l'andamento giorno per giorno degli ultimi 7 giorni con altezza dinamica, etichetta del giorno, data e conteggi.
+  - Evidenziazione speciale del giorno di picco e del giorno odierno.
+- **Cronologia dei completamenti**: Lista dettagliata delle ultime attività completate con relativa priorità.
+
+### 6. 📱 Design Responsive (Desktop & Mobile)
 - **Desktop (>= 1024px)**: Layout fisso e armonioso a 3 colonne (Calendari a sinistra, Calendario al centro, To-Do a destra).
 - **Mobile (< 1024px)**: Il calendario centrale occupa il 100% dello schermo. Le sezioni laterali sono comodamente accessibili tramite **menu a comparsa (Offcanvas / Drawers)** con sfondo oscurato e gesture di chiusura.
 
-### 5. 💾 Persistenza Dati
-- Salvataggio automatico e trasparente su `localStorage` del browser: calendari, eventi, preferenze di visualizzazione e to-do list vengono conservati ad ogni sessione.
+### 7. 💾 Persistenza Dati
+- Salvataggio automatico e trasparente su `localStorage` del browser o su file JSON per profilo utente tramite Electron: calendari, eventi, preferenze di visualizzazione, to-do list con priorità e date di completamento.
 - Dati demo realistici pre-caricati al primo avvio.
 
 ---

@@ -241,6 +241,14 @@
           </span>
         </button>
 
+        <!-- Productivity Stats Button -->
+        <button @click="showProductivityModal = true" 
+                class="flex items-center space-x-1.5 px-3 py-2 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded-xl text-xs sm:text-sm font-semibold transition-all border border-violet-200 focus:outline-none shadow-xs"
+                title="Visualizza statistiche di produttività degli ultimi 7 giorni">
+          <span class="text-sm">📊</span>
+          <span class="hidden sm:inline">Produttività</span>
+        </button>
+
         <!-- Add Event Button -->
         <button @click="openNewEventModal()" 
                 class="flex items-center space-x-1.5 px-3 sm:px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl shadow-sm hover:shadow font-medium text-xs sm:text-sm transition-all focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2">
@@ -504,9 +512,13 @@
           <div class="flex-1 overflow-y-auto grid grid-cols-7 auto-rows-fr divide-x divide-y divide-slate-100 bg-slate-100">
             <div v-for="cell in monthDays" :key="cell.dateKey" 
                  @click="openNewEventModal(cell.dateKey)"
+                 @dragover.prevent="onSlotDragOver(cell.dateKey, $event)"
+                 @dragleave="onSlotDragLeave(cell.dateKey)"
+                 @drop.stop="onSlotDrop(cell.dateKey, '09:00', $event)"
                  :class="[
                    cell.isCurrentMonth ? 'bg-white' : 'bg-slate-50/60 text-slate-400',
-                   cell.isToday ? 'ring-2 ring-inset ring-brand-500/40 bg-brand-50/20' : ''
+                   cell.isToday ? 'ring-2 ring-inset ring-brand-500/40 bg-brand-50/20' : '',
+                   dragOverSlotId === cell.dateKey ? 'drag-over-slot' : ''
                  ]"
                  class="min-h-[95px] sm:min-h-[115px] p-1.5 sm:p-2 flex flex-col hover:bg-slate-50/90 transition-colors cursor-pointer group">
               
@@ -588,9 +600,13 @@
                    class="relative"
                    :class="{'bg-brand-50/10': day.isToday}">
                 
-                <!-- Hour slot row dividers (clickable to add event) -->
+                <!-- Hour slot row dividers (clickable to add event, droppable for tasks) -->
                 <div v-for="h in hoursList" :key="h" 
                      @click="openNewEventModal(day.dateKey, h)"
+                     @dragover.prevent="onSlotDragOver(day.dateKey + '_' + h, $event)"
+                     @dragleave="onSlotDragLeave(day.dateKey + '_' + h)"
+                     @drop.stop="onSlotDrop(day.dateKey, h, $event)"
+                     :class="dragOverSlotId === day.dateKey + '_' + h ? 'drag-over-slot' : ''"
                      class="h-[60px] border-b border-slate-100 hover:bg-slate-50/80 cursor-pointer transition-colors">
                 </div>
 
@@ -643,11 +659,15 @@
 
             <!-- Single Day Column Grid -->
             <div class="flex-1 relative">
-              <!-- Hour background slots -->
+              <!-- Hour background slots (clickable + droppable for tasks) -->
               <div v-for="h in hoursList" :key="h" 
                    @click="openNewEventModal(toDateKey(currentDate), h)"
+                   @dragover.prevent="onSlotDragOver('day_' + h, $event)"
+                   @dragleave="onSlotDragLeave('day_' + h)"
+                   @drop.stop="onSlotDrop(toDateKey(currentDate), h, $event)"
+                   :class="dragOverSlotId === 'day_' + h ? 'drag-over-slot' : ''"
                    class="h-[60px] border-b border-slate-100 hover:bg-slate-50/60 cursor-pointer transition-colors flex items-center px-4">
-                <span class="text-xs text-slate-300 opacity-0 hover:opacity-100 select-none">+ Clicca per aggiungere impegno alle {{ h }}</span>
+                <span class="text-xs text-slate-300 opacity-0 hover:opacity-100 select-none">+ Clicca o trascina un'attività alle {{ h }}</span>
               </div>
 
               <!-- Positioned Event Cards -->
@@ -691,54 +711,96 @@
       <!-- Desktop Sidebar -->
       <aside class="hidden lg:flex flex-col w-80 bg-white border-l border-slate-200 flex-shrink-0 z-10">
         <!-- Sidebar Header -->
-        <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+        <div class="p-3 border-b border-slate-100 flex items-center justify-between">
           <div class="flex items-center space-x-2">
             <h3 class="font-bold text-slate-800 text-sm tracking-wide uppercase">To-Do List</h3>
             <span class="px-2 py-0.5 text-xs font-bold rounded-full bg-brand-50 text-brand-700">
               {{ activeTodosCount }} da fare
             </span>
           </div>
-        </div>
-
-        <!-- Add To-Do Input -->
-        <div class="p-3 border-b border-slate-100">
-          <form @submit.prevent="addTodo" class="flex items-center space-x-2">
-            <input type="text" 
-                   v-model="newTodoText"
-                   placeholder="Aggiungi una nuova attività..." 
-                   class="flex-1 text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all">
-            <button type="submit" 
-                    :disabled="!newTodoText.trim()"
-                    class="p-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white rounded-xl shadow-sm transition-all focus:outline-none">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-              </svg>
-            </button>
-          </form>
-        </div>
-
-        <!-- Filter Tabs -->
-        <div class="px-3 py-2 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between text-xs">
-          <div class="flex space-x-1">
-            <button @click="todoFilter = 'all'" 
-                    :class="{'font-bold text-brand-600 bg-white shadow-xs': todoFilter === 'all', 'text-slate-500 hover:text-slate-800': todoFilter !== 'all'}"
-                    class="px-2.5 py-1 rounded-lg transition-colors">Tutte</button>
-            <button @click="todoFilter = 'active'" 
-                    :class="{'font-bold text-brand-600 bg-white shadow-xs': todoFilter === 'active', 'text-slate-500 hover:text-slate-800': todoFilter !== 'active'}"
-                    class="px-2.5 py-1 rounded-lg transition-colors">Da fare</button>
-            <button @click="todoFilter = 'completed'" 
-                    :class="{'font-bold text-brand-600 bg-white shadow-xs': todoFilter === 'completed', 'text-slate-500 hover:text-slate-800': todoFilter !== 'completed'}"
-                    class="px-2.5 py-1 rounded-lg transition-colors">Fatte</button>
-          </div>
-          <button v-if="todos.some(t => t.completed)" 
-                  @click="clearCompletedTodos" 
-                  class="text-[11px] text-slate-400 hover:text-rose-600 transition-colors">
-            Pulisci fatte
+          <!-- Bottone Produttività -->
+          <button @click="showProductivityModal = true"
+                  class="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-violet-50 hover:bg-violet-100 text-violet-700 text-xs font-semibold transition-colors border border-violet-200"
+                  title="Visualizza statistiche produttività">
+            <span>📊</span>
+            <span>Produttività</span>
           </button>
         </div>
 
+        <!-- Add To-Do Input con selettore priorità -->
+        <div class="p-3 border-b border-slate-100">
+          <form @submit.prevent="addTodo" class="space-y-2">
+            <div class="flex items-center space-x-2">
+              <input type="text" 
+                     v-model="newTodoText"
+                     placeholder="Aggiungi una nuova attività..." 
+                     class="flex-1 text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all">
+              <button type="submit" 
+                      :disabled="!newTodoText.trim()"
+                      class="p-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white rounded-xl shadow-sm transition-all focus:outline-none">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+              </button>
+            </div>
+            <!-- Selettore priorità rapido -->
+            <div class="flex items-center space-x-1.5">
+              <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Priorità:</span>
+              <button v-for="(p, key) in TODO_PRIORITIES" :key="key"
+                      type="button"
+                      @click="newTodoPriority = key"
+                      :title="p.label"
+                      :class="newTodoPriority === key ? 'ring-2 ring-offset-1 scale-110 shadow-sm' : 'opacity-60 hover:opacity-90'"
+                      :style="newTodoPriority === key ? { ringColor: p.color } : {}"
+                      class="text-base transition-all rounded-full">
+                {{ p.flag }}
+              </button>
+              <span class="text-[10px] text-slate-500 pl-1" :style="{ color: TODO_PRIORITIES[newTodoPriority]?.color }">
+                {{ TODO_PRIORITIES[newTodoPriority]?.label }}
+              </span>
+            </div>
+          </form>
+        </div>
+
+        <!-- Filter Tabs: Stato + Priorità -->
+        <div class="px-3 py-2 bg-slate-50/70 border-b border-slate-100 space-y-1.5">
+          <!-- Filtro stato -->
+          <div class="flex items-center justify-between text-xs">
+            <div class="flex space-x-1">
+              <button @click="todoFilter = 'all'" 
+                      :class="{'font-bold text-brand-600 bg-white shadow-xs': todoFilter === 'all', 'text-slate-500 hover:text-slate-800': todoFilter !== 'all'}"
+                      class="px-2.5 py-1 rounded-lg transition-colors">Tutte</button>
+              <button @click="todoFilter = 'active'" 
+                      :class="{'font-bold text-brand-600 bg-white shadow-xs': todoFilter === 'active', 'text-slate-500 hover:text-slate-800': todoFilter !== 'active'}"
+                      class="px-2.5 py-1 rounded-lg transition-colors">Da fare</button>
+              <button @click="todoFilter = 'completed'" 
+                      :class="{'font-bold text-brand-600 bg-white shadow-xs': todoFilter === 'completed', 'text-slate-500 hover:text-slate-800': todoFilter !== 'completed'}"
+                      class="px-2.5 py-1 rounded-lg transition-colors">Fatte</button>
+            </div>
+            <button v-if="todos.some(t => t.completed)" 
+                    @click="clearCompletedTodos" 
+                    class="text-[11px] text-slate-400 hover:text-rose-600 transition-colors">
+              Pulisci fatte
+            </button>
+          </div>
+          <!-- Filtro priorità -->
+          <div class="flex items-center space-x-1">
+            <button @click="todoPriorityFilter = 'all'"
+                    :class="todoPriorityFilter === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                    class="px-2 py-0.5 rounded-lg text-[10px] font-semibold transition-colors">Tutte</button>
+            <button v-for="(p, key) in TODO_PRIORITIES" :key="key"
+                    @click="todoPriorityFilter = key"
+                    :class="todoPriorityFilter === key ? 'ring-2 scale-105 font-bold text-white' : 'opacity-70 hover:opacity-100'"
+                    :style="todoPriorityFilter === key ? { backgroundColor: p.color, ringColor: p.color } : { borderColor: p.color }"
+                    :title="p.label + ' (' + (priorityCounts[key] || 0) + ')'"
+                    class="px-2 py-0.5 rounded-lg text-[10px] font-semibold transition-all border">
+              {{ p.flag }} {{ priorityCounts[key] || 0 }}
+            </button>
+          </div>
+        </div>
+
         <!-- To-Do Items List -->
-        <div class="flex-1 overflow-y-auto p-3 space-y-2">
+        <div class="flex-1 overflow-y-auto p-3 space-y-1.5">
           <div v-if="filteredTodos.length === 0" class="text-center py-12 text-slate-400">
             <svg class="w-10 h-10 mx-auto mb-2 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -747,89 +809,160 @@
           </div>
 
           <div v-for="todo in filteredTodos" :key="todo.id" 
-               class="group flex items-center justify-between p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100/80 border border-slate-100 hover:border-slate-200 transition-all">
+               :draggable="!todo.completed"
+               @dragstart="!todo.completed && onTaskDragStart(todo, $event)"
+               @dragend="onTaskDragEnd"
+               :class="[
+                 'group flex items-center justify-between p-2.5 rounded-xl border transition-all',
+                 todo.completed ? 'bg-slate-50 border-slate-100 opacity-70' : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm',
+                 !todo.completed ? 'todo-draggable' : '',
+                 draggedTodo?.id === todo.id ? 'todo-dragging' : ''
+               ]">
+            <!-- Drag handle + Priority Flag -->
+            <div class="flex items-center flex-shrink-0 mr-2 space-x-1">
+              <svg v-if="!todo.completed" class="w-3.5 h-3.5 text-slate-300 cursor-grab" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 6a2 2 0 100-4 2 2 0 000 4zM8 14a2 2 0 100-4 2 2 0 000 4zM8 22a2 2 0 100-4 2 2 0 000 4zM16 6a2 2 0 100-4 2 2 0 000 4zM16 14a2 2 0 100-4 2 2 0 000 4zM16 22a2 2 0 100-4 2 2 0 000 4z"/>
+              </svg>
+              <button v-if="!todo.completed"
+                      @click.stop="cycleTodoPriority(todo)"
+                      :title="'Priorità: ' + (TODO_PRIORITIES[todo.priority || 'normal']?.label || '') + ' – clicca per cambiare'"
+                      class="text-sm leading-none hover:scale-125 transition-transform">
+                {{ TODO_PRIORITIES[todo.priority || 'normal']?.flag || '🔵' }}
+              </button>
+            </div>
+
             <!-- Checkbox & Text -->
-            <label class="flex items-center space-x-3 cursor-pointer select-none flex-1 min-w-0 pr-2">
+            <label class="flex items-center space-x-2 cursor-pointer select-none flex-1 min-w-0 pr-2">
               <input type="checkbox" 
                      :checked="todo.completed" 
                      @change="toggleTodo(todo.id)"
-                     class="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 border-slate-300 cursor-pointer">
+                     class="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 border-slate-300 cursor-pointer flex-shrink-0">
               <span :class="{'task-completed text-slate-400': todo.completed, 'text-slate-700': !todo.completed}" 
-                    class="text-sm font-medium break-words">
+                    class="text-sm font-medium break-words min-w-0">
                 {{ todo.title }}
               </span>
             </label>
 
             <!-- Delete Button -->
             <button @click="deleteTodo(todo.id)" 
-                    class="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all"
+                    class="opacity-0 group-hover:opacity-100 flex-shrink-0 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all"
                     title="Elimina attività">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
             </button>
           </div>
+
+          <!-- Tip drag -->
+          <p v-if="todos.some(t => !t.completed)" class="text-center text-[10px] text-slate-400 pt-2">
+            ↕ Trascina un'attività sullo slot del calendario per programmarla
+          </p>
         </div>
       </aside>
 
+
       <!-- Mobile Offcanvas Right Sidebar (Drawer) -->
+
       <div v-if="isRightDrawerOpen" 
            class="lg:hidden fixed inset-0 z-40 flex justify-end">
         <!-- Backdrop -->
         <div @click="isRightDrawerOpen = false" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity"></div>
         <!-- Drawer Content -->
         <div class="relative flex-1 flex flex-col max-w-xs w-full bg-white shadow-2xl z-50">
-          <div class="p-4 border-b border-slate-100 flex items-center justify-between">
-            <h3 class="font-bold text-slate-800 text-base">To-Do List Extra</h3>
-            <button @click="isRightDrawerOpen = false" class="p-2 text-slate-500 hover:bg-slate-100 rounded-lg">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+          <div class="p-3 border-b border-slate-100 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <h3 class="font-bold text-slate-800 text-base">To-Do List</h3>
+              <span class="px-2 py-0.5 text-xs font-bold rounded-full bg-brand-50 text-brand-700">
+                {{ activeTodosCount }}
+              </span>
+            </div>
+            <div class="flex items-center space-x-1">
+              <button @click="showProductivityModal = true" class="p-1.5 text-violet-600 hover:bg-violet-50 rounded-lg text-sm" title="Statistiche">
+                📊
+              </button>
+              <button @click="isRightDrawerOpen = false" class="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <!-- Mobile Add Todo Form -->
-          <div class="p-4 border-b border-slate-100">
-            <form @submit.prevent="addTodo" class="flex items-center space-x-2">
-              <input type="text" 
-                     v-model="newTodoText"
-                     placeholder="Aggiungi attività..." 
-                     class="flex-1 text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500">
-              <button type="submit" 
-                      :disabled="!newTodoText.trim()"
-                      class="p-2 bg-brand-600 text-white rounded-xl">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                </svg>
-              </button>
+          <div class="p-3 border-b border-slate-100">
+            <form @submit.prevent="addTodo" class="space-y-2">
+              <div class="flex items-center space-x-2">
+                <input type="text" 
+                       v-model="newTodoText"
+                       placeholder="Aggiungi attività..." 
+                       class="flex-1 text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                <button type="submit" 
+                        :disabled="!newTodoText.trim()"
+                        class="p-2 bg-brand-600 text-white rounded-xl">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                  </svg>
+                </button>
+              </div>
+              <!-- Selettore priorità -->
+              <div class="flex items-center space-x-1.5">
+                <span class="text-[10px] font-bold text-slate-500 uppercase">Priorità:</span>
+                <button v-for="(p, key) in TODO_PRIORITIES" :key="key"
+                        type="button"
+                        @click="newTodoPriority = key"
+                        :class="newTodoPriority === key ? 'ring-2 ring-offset-1 scale-110' : 'opacity-60'"
+                        class="text-sm">
+                  {{ p.flag }}
+                </button>
+              </div>
             </form>
           </div>
 
-          <!-- Mobile Filters -->
-          <div class="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-xs">
-            <div class="flex space-x-1">
-              <button @click="todoFilter = 'all'" :class="{'font-bold text-brand-600': todoFilter === 'all'}" class="px-2 py-1">Tutte</button>
-              <button @click="todoFilter = 'active'" :class="{'font-bold text-brand-600': todoFilter === 'active'}" class="px-2 py-1">Da fare</button>
-              <button @click="todoFilter = 'completed'" :class="{'font-bold text-brand-600': todoFilter === 'completed'}" class="px-2 py-1">Fatte</button>
+          <!-- Mobile Filters: Stato + Priorità -->
+          <div class="px-3 py-2 bg-slate-50 border-b border-slate-100 space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <div class="flex space-x-1">
+                <button @click="todoFilter = 'all'" :class="{'font-bold text-brand-600': todoFilter === 'all'}" class="px-2 py-0.5">Tutte</button>
+                <button @click="todoFilter = 'active'" :class="{'font-bold text-brand-600': todoFilter === 'active'}" class="px-2 py-0.5">Da fare</button>
+                <button @click="todoFilter = 'completed'" :class="{'font-bold text-brand-600': todoFilter === 'completed'}" class="px-2 py-0.5">Fatte</button>
+              </div>
+              <button v-if="todos.some(t => t.completed)" @click="clearCompletedTodos" class="text-rose-600 text-[11px]">Pulisci</button>
             </div>
-            <button v-if="todos.some(t => t.completed)" @click="clearCompletedTodos" class="text-rose-600 text-[11px]">Pulisci</button>
+            <!-- Filtro priorità orizzontale scrollabile -->
+            <div class="flex items-center space-x-1 overflow-x-auto pb-0.5">
+              <button @click="todoPriorityFilter = 'all'"
+                      :class="todoPriorityFilter === 'all' ? 'bg-slate-700 text-white' : 'bg-white text-slate-600'"
+                      class="px-2 py-0.5 rounded text-[10px] font-semibold border flex-shrink-0">Tutte</button>
+              <button v-for="(p, key) in TODO_PRIORITIES" :key="key"
+                      @click="todoPriorityFilter = key"
+                      :class="todoPriorityFilter === key ? 'font-bold text-white' : 'bg-white'"
+                      :style="todoPriorityFilter === key ? { backgroundColor: p.color } : { borderColor: p.color }"
+                      class="px-1.5 py-0.5 rounded text-[10px] font-semibold border flex-shrink-0">
+                {{ p.flag }} {{ priorityCounts[key] || 0 }}
+              </button>
+            </div>
           </div>
 
           <!-- Mobile Items List -->
-          <div class="flex-1 overflow-y-auto p-4 space-y-2">
+          <div class="flex-1 overflow-y-auto p-3 space-y-2">
             <div v-for="todo in filteredTodos" :key="todo.id" 
-                 class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
-              <label class="flex items-center space-x-3 cursor-pointer flex-1 min-w-0 pr-2">
+                 class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+              <div class="flex items-center flex-shrink-0 mr-1.5">
+                <button @click.stop="cycleTodoPriority(todo)" class="text-sm leading-none" :title="'Priorità: ' + (TODO_PRIORITIES[todo.priority || 'normal']?.label || '')">
+                  {{ TODO_PRIORITIES[todo.priority || 'normal']?.flag || '🔵' }}
+                </button>
+              </div>
+              <label class="flex items-center space-x-2 cursor-pointer flex-1 min-w-0 pr-2">
                 <input type="checkbox" 
                        :checked="todo.completed" 
                        @change="toggleTodo(todo.id)"
-                       class="w-5 h-5 rounded text-brand-600">
+                       class="w-4 h-4 rounded text-brand-600 flex-shrink-0">
                 <span :class="{'task-completed text-slate-400': todo.completed, 'text-slate-800': !todo.completed}" 
-                      class="text-sm font-medium break-words">
+                      class="text-xs font-medium break-words">
                   {{ todo.title }}
                 </span>
               </label>
-              <button @click="deleteTodo(todo.id)" class="p-1.5 text-slate-400 hover:text-rose-600">
+              <button @click="deleteTodo(todo.id)" class="p-1 text-slate-400 hover:text-rose-600 flex-shrink-0">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
@@ -1143,6 +1276,149 @@
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
             </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- MODALE: COMPONENTE STATISTICHE PRODUTTIVITÀ -->
+    <!-- ========================================== -->
+    <div v-if="showProductivityModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div @click="showProductivityModal = false" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
+
+      <div class="relative bg-white rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl z-10 border border-slate-100 max-h-[90vh] flex flex-col">
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between pb-4 border-b border-slate-100 flex-shrink-0">
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-2xl bg-violet-100 text-violet-700 flex items-center justify-center text-xl shadow-xs">
+              📊
+            </div>
+            <div>
+              <h3 class="text-lg font-bold text-slate-900">Produttività Settimanale</h3>
+              <p class="text-xs text-slate-500">Monitoraggio attività completate negli ultimi 7 giorni</p>
+            </div>
+          </div>
+          <button @click="showProductivityModal = false" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="overflow-y-auto flex-1 py-4 space-y-5">
+          <!-- 2 Principali Metriche Card -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <!-- Metrica 1: Totale completati ultimi 7 giorni -->
+            <div class="p-4 rounded-2xl bg-gradient-to-br from-emerald-50/80 to-teal-50/50 border border-emerald-100 flex items-center space-x-4">
+              <div class="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center text-2xl shadow-sm">
+                ✅
+              </div>
+              <div>
+                <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Ultimi 7 Giorni</span>
+                <div class="text-2xl sm:text-3xl font-extrabold text-emerald-950">
+                  {{ productivityStats.totalCompletedWeek }} <span class="text-sm font-semibold text-emerald-700">task</span>
+                </div>
+                <p class="text-[11px] text-emerald-600 font-medium">Attività completate con successo</p>
+              </div>
+            </div>
+
+            <!-- Metrica 2: Giorno di maggiore produttività -->
+            <div class="p-4 rounded-2xl bg-gradient-to-br from-violet-50/80 to-indigo-50/50 border border-violet-100 flex items-center space-x-4">
+              <div class="w-12 h-12 rounded-2xl bg-violet-600 text-white flex items-center justify-center text-2xl shadow-sm">
+                🏆
+              </div>
+              <div>
+                <span class="text-xs font-bold text-violet-800 uppercase tracking-wider">Giorno più produttivo</span>
+                <div class="text-xl sm:text-2xl font-extrabold text-violet-950 truncate max-w-[170px]" :title="productivityStats.peakDayName">
+                  {{ productivityStats.peakDayName }}
+                </div>
+                <p class="text-[11px] text-violet-600 font-medium">
+                  <span v-if="productivityStats.peakDayCount > 0">{{ productivityStats.peakDayCount }} task completati</span>
+                  <span v-else>Nessun completamento registrato</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Grafico a Barre Settimanale -->
+          <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+            <div class="flex items-center justify-between mb-4">
+              <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
+                <span>📈</span>
+                <span>Andamento Giornaliero (ultimi 7 giorni)</span>
+              </h4>
+              <span class="text-[11px] text-slate-400 font-medium">Altezza proporzionale ai completamenti</span>
+            </div>
+
+            <!-- Contenitore Barre -->
+            <div class="grid grid-cols-7 gap-1.5 sm:gap-3 items-end h-40 pt-4 px-1">
+              <div v-for="bar in productivityStats.dailyBars" :key="bar.dateKey" 
+                   class="flex flex-col items-center h-full justify-end group">
+                <!-- Conteggio numerico sopra la barra -->
+                <span :class="bar.count > 0 ? 'font-bold text-slate-800 opacity-100' : 'text-slate-400 opacity-50'"
+                      class="text-[11px] mb-1 transition-all">
+                  {{ bar.count }}
+                </span>
+
+                <!-- Colonna barra verticale -->
+                <div class="w-full bg-slate-200/80 rounded-t-xl h-28 relative flex items-end p-0.5 overflow-hidden">
+                  <div :style="{ height: bar.heightPercent + '%' }"
+                       :class="[
+                         bar.isPeak ? 'bg-gradient-to-t from-violet-600 to-indigo-500 shadow-sm' : (bar.count > 0 ? 'bg-gradient-to-t from-brand-600 to-indigo-400' : 'bg-slate-300'),
+                         'w-full rounded-t-lg stat-bar-fill transition-all duration-500'
+                       ]">
+                  </div>
+                </div>
+
+                <!-- Etichetta giorno (Lun, Mar...) + Data -->
+                <div class="mt-2 text-center">
+                  <div :class="bar.isToday ? 'bg-brand-600 text-white font-bold px-1 rounded' : 'text-slate-700 font-semibold'"
+                       class="text-[11px] leading-tight">
+                    {{ bar.dayLabel }}
+                  </div>
+                  <div class="text-[9px] text-slate-400 mt-0.5 hidden sm:block">
+                    {{ bar.dateFormatted }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Elenco attività completate di recente -->
+          <div>
+            <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 flex items-center justify-between">
+              <span>Ultime attività completate</span>
+              <span class="text-slate-400 font-normal">Totale: {{ productivityStats.recentCompletedTasks.length }}</span>
+            </h4>
+
+            <div v-if="productivityStats.recentCompletedTasks.length === 0" 
+                 class="p-4 text-center text-xs text-slate-400 bg-slate-50 rounded-2xl border border-slate-100">
+              Nessun task completato negli ultimi 7 giorni. Spunta le attività nella To-Do list per vedere le statistiche!
+            </div>
+
+            <div v-else class="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+              <div v-for="t in productivityStats.recentCompletedTasks" :key="t.id"
+                   class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs">
+                <div class="flex items-center space-x-2 truncate pr-2">
+                  <span class="text-sm">{{ TODO_PRIORITIES[t.priority || 'normal']?.flag || '🔵' }}</span>
+                  <span class="font-medium text-slate-700 truncate line-through opacity-75">{{ t.title }}</span>
+                </div>
+                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                      :style="{ color: TODO_PRIORITIES[t.priority || 'normal']?.color, backgroundColor: (TODO_PRIORITIES[t.priority || 'normal']?.color || '#3b82f6') + '15' }">
+                  {{ TODO_PRIORITIES[t.priority || 'normal']?.label || 'Normale' }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="pt-4 border-t border-slate-100 flex items-center justify-end flex-shrink-0">
+          <button @click="showProductivityModal = false"
+                  class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-semibold transition-colors">
+            Chiudi
           </button>
         </div>
       </div>

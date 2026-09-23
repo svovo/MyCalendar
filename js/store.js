@@ -25,6 +25,7 @@ function sanitizeUsername(username) {
 }
 
 function getDefaultUserData(username = 'Utente') {
+  const now = Date.now();
   return {
     username: username,
     calendars: [
@@ -33,8 +34,16 @@ function getDefaultUserData(username = 'Utente') {
       { id: 'cal_study', name: 'Studio & Corsi', color: '#8b5cf6', isVisible: true },
       { id: 'cal_sport', name: 'Sport & Salute', color: '#f97316', isVisible: true }
     ],
-    events: [], // Nuovo utente inizia pulito senza impegni altrui
-    todos: [],   // Nuovo utente inizia con to-do vuota
+    events: [],
+    todos: [
+      { id: generateId('todo'), title: 'Consegnare report urgente al responsabile', completed: false, priority: 'urgent', createdAt: now - 3600000, completedAt: null },
+      { id: generateId('todo'), title: 'Preparare bozza presentazione progetto', completed: false, priority: 'important', createdAt: now - 7200000, completedAt: null },
+      { id: generateId('todo'), title: 'Ordinare nuovo cavo USB-C per la scrivania', completed: false, priority: 'normal', createdAt: now - 14400000, completedAt: null },
+      { id: generateId('todo'), title: 'Riorganizzare cartella documenti archivio', completed: false, priority: 'low', createdAt: now - 28800000, completedAt: null },
+      { id: generateId('todo'), title: 'Allineamento con team sviluppo su roadmap', completed: true, priority: 'urgent', createdAt: now - 90000000, completedAt: now - 86400000 },
+      { id: generateId('todo'), title: 'Revisione specifiche e requisiti tecnici', completed: true, priority: 'important', createdAt: now - 180000000, completedAt: now - 172800000 },
+      { id: generateId('todo'), title: 'Lettura documentazione librerie drag & drop', completed: true, priority: 'normal', createdAt: now - 260000000, completedAt: now - 250000000 }
+    ],
     preferences: { currentView: 'month' }
   };
 }

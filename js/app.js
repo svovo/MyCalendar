@@ -63,10 +63,25 @@ const app = createApp({
       }, 3500);
     };
 
-    // --- To-Do List State ---
+    // --- To-Do List & Priority State ---
+    const TODO_PRIORITIES = {
+      urgent: { key: 'urgent', label: 'Urgente', color: '#ef4444', flag: '🚩', bg: 'bg-rose-50 text-rose-700 border-rose-200 ring-rose-400' },
+      important: { key: 'important', label: 'Importante', color: '#f59e0b', flag: '🟡', bg: 'bg-amber-50 text-amber-700 border-amber-200 ring-amber-400' },
+      normal: { key: 'normal', label: 'Non urgente', color: '#3b82f6', flag: '🔵', bg: 'bg-blue-50 text-blue-700 border-blue-200 ring-blue-400' },
+      low: { key: 'low', label: 'Da fare quando si riesce', color: '#10b981', flag: '🟢', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200 ring-emerald-400' }
+    };
     const todos = ref([]);
     const newTodoText = ref('');
+    const newTodoPriority = ref('normal');
     const todoFilter = ref('all'); // 'all' | 'active' | 'completed'
+    const todoPriorityFilter = ref('all'); // 'all' | 'urgent' | 'important' | 'normal' | 'low'
+
+    // --- Drag & Drop Time Blocking State ---
+    const draggedTodo = ref(null);
+    const dragOverSlotId = ref('');
+
+    // --- Statistiche Produttività State ---
+    const showProductivityModal = ref(false);
 
     // --- Auto-Save Watcher (Per-User Scoped) ---
     const triggerAutoSave = () => {
@@ -166,17 +181,33 @@ const app = createApp({
     });
 
     const filteredTodos = computed(() => {
-      if (todoFilter.value === 'active') {
-        return todos.value.filter(t => !t.completed);
-      }
-      if (todoFilter.value === 'completed') {
-        return todos.value.filter(t => t.completed);
-      }
-      return todos.value;
+      return todos.value.filter(t => {
+        // Filtro stato (tutte / da fare / completate)
+        if (todoFilter.value === 'active' && t.completed) return false;
+        if (todoFilter.value === 'completed' && !t.completed) return false;
+        // Filtro priorità (tutte / urgent / important / normal / low)
+        if (todoPriorityFilter.value !== 'all') {
+          const p = t.priority || 'normal';
+          if (p !== todoPriorityFilter.value) return false;
+        }
+        return true;
+      });
     });
 
     const activeTodosCount = computed(() => {
       return todos.value.filter(t => !t.completed).length;
+    });
+
+    const priorityCounts = computed(() => {
+      const counts = { urgent: 0, important: 0, normal: 0, low: 0, total: 0 };
+      todos.value.forEach(t => {
+        if (!t.completed) {
+          const p = t.priority || 'normal';
+          if (counts[p] !== undefined) counts[p]++;
+          counts.total++;
+        }
+      });
+      return counts;
     });
 
     // --- Calendar Navigation & Header Titles ---
@@ -540,7 +571,9 @@ const app = createApp({
         id: AppStore.generateId('todo'),
         title: text,
         completed: false,
-        createdAt: Date.now()
+        priority: newTodoPriority.value || 'normal',
+        createdAt: Date.now(),
+        completedAt: null
       });
       newTodoText.value = '';
     };
@@ -549,7 +582,22 @@ const app = createApp({
       const t = todos.value.find(item => item.id === id);
       if (t) {
         t.completed = !t.completed;
+        t.completedAt = t.completed ? Date.now() : null;
       }
+    };
+
+    const setTodoPriority = (id, priority) => {
+      const t = todos.value.find(item => item.id === id);
+      if (t) {
+        t.priority = priority;
+      }
+    };
+
+    const cycleTodoPriority = (todo) => {
+      const order = ['normal', 'important', 'urgent', 'low'];
+      const current = todo.priority || 'normal';
+      const nextIdx = (order.indexOf(current) + 1) % order.length;
+      todo.priority = order[nextIdx];
     };
 
     const deleteTodo = (id) => {
@@ -560,6 +608,148 @@ const app = createApp({
       todos.value = todos.value.filter(t => !t.completed);
     };
 
+    // --- Drag & Drop per Time Blocking sul Calendario ---
+    const onTaskDragStart = (todo, event) => {
+      draggedTodo.value = todo;
+      if (event && event.dataTransfer) {
+        event.dataTransfer.setData('text/plain', todo.id);
+        event.dataTransfer.effectAllowed = 'move';
+      }
+    };
+
+    const onTaskDragEnd = () => {
+      draggedTodo.value = null;
+      dragOverSlotId.value = '';
+    };
+
+    const onSlotDragOver = (slotId, event) => {
+      event.preventDefault();
+      if (event && event.dataTransfer) {
+        event.dataTransfer.dropEffect = 'move';
+      }
+      dragOverSlotId.value = slotId;
+    };
+
+    const onSlotDragLeave = (slotId) => {
+      if (dragOverSlotId.value === slotId) {
+        dragOverSlotId.value = '';
+      }
+    };
+
+    const onSlotDrop = (dateStr, timeStr, event) => {
+      event.preventDefault();
+      dragOverSlotId.value = '';
+
+      let taskId = '';
+      if (event && event.dataTransfer) {
+        taskId = event.dataTransfer.getData('text/plain');
+      }
+      const todo = draggedTodo.value || todos.value.find(t => t.id === taskId);
+      if (!todo) return;
+
+      const start = timeStr || '09:00';
+      const startMin = CalendarUtils.timeToMinutes(start);
+      const end = CalendarUtils.minutesToTime(startMin + 60);
+
+      // Assegna al primo calendario visibile o disponibile
+      const targetCal = calendars.value.find(c => c.isVisible) || calendars.value[0];
+      const calendarId = targetCal ? targetCal.id : '';
+
+      const priorityInfo = TODO_PRIORITIES[todo.priority || 'normal'] || TODO_PRIORITIES.normal;
+
+      // Crea l'impegno sul calendario
+      events.value.push({
+        id: AppStore.generateId('evt'),
+        calendarId: calendarId,
+        title: todo.title,
+        date: dateStr,
+        startTime: start,
+        endTime: end,
+        notes: `Time blocking da To-Do [Priorità: ${priorityInfo.label}]`
+      });
+
+      // Rimuove il task dalla To-Do list generica
+      todos.value = todos.value.filter(t => t.id !== todo.id);
+
+      triggerAutoSave();
+      draggedTodo.value = null;
+
+      showToast(`Attività "${todo.title}" programmata nel calendario per ${dateStr} alle ${start}!`);
+    };
+
+    // --- Componente Statistiche Produttività ---
+    const productivityStats = computed(() => {
+      const now = Date.now();
+      const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+
+      // Task completati negli ultimi 7 giorni
+      const completedLast7Days = todos.value.filter(t => {
+        if (!t.completed) return false;
+        const time = t.completedAt || t.createdAt || 0;
+        return time >= sevenDaysAgo;
+      });
+
+      const totalCompletedWeek = completedLast7Days.length;
+
+      // Genera 7 barre giornaliere per gli ultimi 7 giorni
+      const dailyBars = [];
+      const dayCounts = {};
+
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dateKey = CalendarUtils.toDateKey(d);
+        const dayIdx = (d.getDay() + 6) % 7;
+        const dayShort = CalendarUtils.DAYS_SHORT_IT[dayIdx];
+        const dayFull = CalendarUtils.DAYS_IT[dayIdx];
+
+        const count = completedLast7Days.filter(t => {
+          const compTime = t.completedAt || t.createdAt;
+          const compDateKey = CalendarUtils.toDateKey(new Date(compTime));
+          return compDateKey === dateKey;
+        }).length;
+
+        dayCounts[dayFull] = (dayCounts[dayFull] || 0) + count;
+
+        dailyBars.push({
+          dateKey,
+          dateFormatted: `${d.getDate()} ${CalendarUtils.MONTHS_IT[d.getMonth()].slice(0, 3)}`,
+          dayLabel: dayShort,
+          dayFull,
+          count,
+          isToday: i === 0
+        });
+      }
+
+      // Individua giorno di picco di produttività
+      let peakDayName = 'Nessuno';
+      let peakDayCount = 0;
+      for (const [dayName, count] of Object.entries(dayCounts)) {
+        if (count > peakDayCount) {
+          peakDayCount = count;
+          peakDayName = dayName;
+        }
+      }
+
+      const maxCount = Math.max(...dailyBars.map(b => b.count), 1);
+      dailyBars.forEach(b => {
+        b.heightPercent = b.count > 0 ? Math.max(16, Math.round((b.count / maxCount) * 100)) : 8;
+        b.isPeak = b.count === peakDayCount && peakDayCount > 0;
+      });
+
+      const recentCompletedTasks = [...completedLast7Days].sort((a, b) => {
+        return (b.completedAt || b.createdAt) - (a.completedAt || a.createdAt);
+      });
+
+      return {
+        totalCompletedWeek,
+        peakDayName,
+        peakDayCount,
+        dailyBars,
+        recentCompletedTasks
+      };
+    });
+
     const closeDrawers = () => {
       isLeftDrawerOpen.value = false;
       isRightDrawerOpen.value = false;
@@ -567,6 +757,10 @@ const app = createApp({
 
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
+        if (showProductivityModal.value) {
+          showProductivityModal.value = false;
+          return;
+        }
         if (showRepeatModal.value) {
           showRepeatModal.value = false;
           return;
@@ -690,7 +884,28 @@ const app = createApp({
       clearCompletedTodos,
       closeDrawers,
       toDateKey: CalendarUtils.toDateKey,
-      CalendarUtils
+      CalendarUtils,
+
+      // Priorities & To-Do Filters
+      TODO_PRIORITIES,
+      newTodoPriority,
+      todoPriorityFilter,
+      priorityCounts,
+      setTodoPriority,
+      cycleTodoPriority,
+
+      // Drag and Drop Time Blocking
+      draggedTodo,
+      dragOverSlotId,
+      onTaskDragStart,
+      onTaskDragEnd,
+      onSlotDragOver,
+      onSlotDragLeave,
+      onSlotDrop,
+
+      // Productivity Stats
+      showProductivityModal,
+      productivityStats
     };
   }
 });
