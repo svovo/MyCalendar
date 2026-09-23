@@ -75,6 +75,8 @@ const app = createApp({
     const newTodoPriority = ref('normal');
     const todoFilter = ref('all'); // 'all' | 'active' | 'completed'
     const todoPriorityFilter = ref('all'); // 'all' | 'urgent' | 'important' | 'normal' | 'low'
+    const editingTodoId = ref(null);
+    const editingTodoText = ref('');
 
     // --- Drag & Drop Time Blocking State ---
     const draggedTodo = ref(null);
@@ -182,9 +184,11 @@ const app = createApp({
 
     const filteredTodos = computed(() => {
       return todos.value.filter(t => {
-        // Filtro stato (tutte / da fare / completate)
-        if (todoFilter.value === 'active' && t.completed) return false;
-        if (todoFilter.value === 'completed' && !t.completed) return false;
+        const isDone = Boolean(t.completed || t.isCompleted || t.status === 'done');
+        // Soft-delete / completamento: nasconde in automatico dalla vista principale (a meno che non sia attivo il tab 'completed')
+        if (todoFilter.value !== 'completed' && isDone) return false;
+        if (todoFilter.value === 'completed' && !isDone) return false;
+
         // Filtro priorità (tutte / urgent / important / normal / low)
         if (todoPriorityFilter.value !== 'all') {
           const p = t.priority || 'normal';
@@ -195,13 +199,14 @@ const app = createApp({
     });
 
     const activeTodosCount = computed(() => {
-      return todos.value.filter(t => !t.completed).length;
+      return todos.value.filter(t => !t.completed && !t.isCompleted && t.status !== 'done').length;
     });
 
     const priorityCounts = computed(() => {
       const counts = { urgent: 0, important: 0, normal: 0, low: 0, total: 0 };
       todos.value.forEach(t => {
-        if (!t.completed) {
+        const isDone = Boolean(t.completed || t.isCompleted || t.status === 'done');
+        if (!isDone) {
           const p = t.priority || 'normal';
           if (counts[p] !== undefined) counts[p]++;
           counts.total++;
@@ -571,6 +576,8 @@ const app = createApp({
         id: AppStore.generateId('todo'),
         title: text,
         completed: false,
+        isCompleted: false,
+        status: 'active',
         priority: newTodoPriority.value || 'normal',
         createdAt: Date.now(),
         completedAt: null
@@ -581,8 +588,11 @@ const app = createApp({
     const toggleTodo = (id) => {
       const t = todos.value.find(item => item.id === id);
       if (t) {
-        t.completed = !t.completed;
-        t.completedAt = t.completed ? Date.now() : null;
+        const willBeDone = !(t.completed || t.isCompleted || t.status === 'done');
+        t.completed = willBeDone;
+        t.isCompleted = willBeDone;
+        t.status = willBeDone ? 'done' : 'active';
+        t.completedAt = willBeDone ? Date.now() : null;
       }
     };
 
@@ -600,12 +610,46 @@ const app = createApp({
       todo.priority = order[nextIdx];
     };
 
+    // Soft delete: invece di rimuovere fisicamente l'elemento, aggiorna lo stato a completato/done
     const deleteTodo = (id) => {
-      todos.value = todos.value.filter(t => t.id !== id);
+      const t = todos.value.find(item => item.id === id);
+      if (t) {
+        t.completed = true;
+        t.isCompleted = true;
+        t.status = 'done';
+        t.completedAt = t.completedAt || Date.now();
+      }
     };
 
     const clearCompletedTodos = () => {
-      todos.value = todos.value.filter(t => !t.completed);
+      todos.value.forEach(t => {
+        if (t.completed || t.isCompleted || t.status === 'done') {
+          t.completed = true;
+          t.isCompleted = true;
+          t.status = 'done';
+          t.completedAt = t.completedAt || Date.now();
+        }
+      });
+    };
+
+    // --- Modifica del testo del Task ---
+    const startEditTodo = (todo) => {
+      editingTodoId.value = todo.id;
+      editingTodoText.value = todo.title;
+    };
+
+    const saveEditTodo = (id) => {
+      const t = todos.value.find(item => item.id === id);
+      const text = editingTodoText.value.trim();
+      if (t && text) {
+        t.title = text;
+      }
+      cancelEditTodo();
+    };
+
+    const cancelEditTodo = () => {
+      editingTodoId.value = null;
+      editingTodoText.value = '';
     };
 
     // --- Drag & Drop per Time Blocking sul Calendario ---
@@ -893,6 +937,11 @@ const app = createApp({
       priorityCounts,
       setTodoPriority,
       cycleTodoPriority,
+      editingTodoId,
+      editingTodoText,
+      startEditTodo,
+      saveEditTodo,
+      cancelEditTodo,
 
       // Drag and Drop Time Blocking
       draggedTodo,
