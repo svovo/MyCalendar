@@ -777,10 +777,12 @@
                       :class="{'font-bold text-brand-600 bg-white shadow-xs': todoFilter === 'completed', 'text-slate-500 hover:text-slate-800': todoFilter !== 'completed'}"
                       class="px-2.5 py-1 rounded-lg transition-colors">Fatte</button>
             </div>
-            <button v-if="todos.some(t => t.completed)" 
-                    @click="clearCompletedTodos" 
-                    class="text-[11px] text-slate-400 hover:text-rose-600 transition-colors">
-              Pulisci fatte
+            <button v-if="todos.some(t => t.completed || t.isCompleted || t.status === 'done')" 
+                    @click="hardDeleteCompletedTodos" 
+                    class="text-[11px] font-semibold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 px-2 py-0.5 rounded-lg transition-colors flex items-center space-x-1"
+                    title="Elimina definitivamente i task completati dalla lista senza intaccare le statistiche">
+              <span>🗑️</span>
+              <span>Svuota completati</span>
             </button>
           </div>
           <!-- Filtro priorità -->
@@ -960,7 +962,12 @@
                 <button @click="todoFilter = 'active'" :class="{'font-bold text-brand-600': todoFilter === 'active'}" class="px-2 py-0.5">Da fare</button>
                 <button @click="todoFilter = 'completed'" :class="{'font-bold text-brand-600': todoFilter === 'completed'}" class="px-2 py-0.5">Fatte</button>
               </div>
-              <button v-if="todos.some(t => t.completed)" @click="clearCompletedTodos" class="text-rose-600 text-[11px]">Pulisci</button>
+              <button v-if="todos.some(t => t.completed || t.isCompleted || t.status === 'done')" 
+                      @click="hardDeleteCompletedTodos" 
+                      class="text-rose-600 hover:text-rose-800 text-[11px] font-bold"
+                      title="Svuota ed elimina definitivamente i task completati">
+                🗑️ Svuota
+              </button>
             </div>
             <!-- Filtro priorità orizzontale scrollabile -->
             <div class="flex items-center space-x-1 overflow-x-auto pb-0.5">

@@ -44,6 +44,7 @@ function getDefaultUserData(username = 'Utente') {
       { id: generateId('todo'), title: 'Revisione specifiche e requisiti tecnici', completed: true, priority: 'important', createdAt: now - 180000000, completedAt: now - 172800000 },
       { id: generateId('todo'), title: 'Lettura documentazione librerie drag & drop', completed: true, priority: 'normal', createdAt: now - 260000000, completedAt: now - 250000000 }
     ],
+    productivityLog: {},
     preferences: { currentView: 'month' }
   };
 }
@@ -109,6 +110,7 @@ const Store = {
       calendars: data.calendars || [],
       events: data.events || [],
       todos: data.todos || [],
+      productivityLog: data.productivityLog || {},
       preferences: data.preferences || { currentView: 'month' },
       updatedAt: Date.now()
     };

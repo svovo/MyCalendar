@@ -84,6 +84,7 @@ const app = createApp({
 
     // --- Statistiche Produttività State ---
     const showProductivityModal = ref(false);
+    const productivityLog = ref({}); // Mappa data -> numero task completati, es. { '2026-09-23': 3 }
 
     // --- Auto-Save Watcher (Per-User Scoped) ---
     const triggerAutoSave = () => {
@@ -92,7 +93,8 @@ const app = createApp({
         calendars: calendars.value,
         events: events.value,
         todos: todos.value,
-        preferences: preferences.value
+        preferences: preferences.value,
+        productivityLog: productivityLog.value
       });
     };
 
@@ -100,6 +102,7 @@ const app = createApp({
     watch(events, triggerAutoSave, { deep: true });
     watch(todos, triggerAutoSave, { deep: true });
     watch(preferences, triggerAutoSave, { deep: true });
+    watch(productivityLog, triggerAutoSave, { deep: true });
 
     // --- User Login / Logout Logic ---
     const loginUser = async (targetUser = null) => {
@@ -119,6 +122,21 @@ const app = createApp({
         preferences.value = userData.preferences || { currentView: 'month' };
         currentView.value = preferences.value.currentView || 'month';
 
+        // Carica o migra il log delle statistiche
+        if ((!userData.productivityLog || Object.keys(userData.productivityLog).length === 0) && Array.isArray(userData.todos)) {
+          const initialLog = {};
+          userData.todos.forEach(t => {
+            if (t.completed || t.isCompleted || t.status === 'done') {
+              const d = t.completedAt ? new Date(t.completedAt) : new Date(t.createdAt || Date.now());
+              const dateKey = CalendarUtils.toDateKey(d);
+              initialLog[dateKey] = (initialLog[dateKey] || 0) + 1;
+            }
+          });
+          productivityLog.value = initialLog;
+        } else {
+          productivityLog.value = userData.productivityLog || {};
+        }
+
         isUserLoggedIn.value = true;
         knownUsers.value = AppStore.getKnownUsers();
       } catch (err) {
@@ -137,6 +155,7 @@ const app = createApp({
       calendars.value = [];
       events.value = [];
       todos.value = [];
+      productivityLog.value = {};
       knownUsers.value = AppStore.getKnownUsers();
     };
 
@@ -593,6 +612,17 @@ const app = createApp({
         t.isCompleted = willBeDone;
         t.status = willBeDone ? 'done' : 'active';
         t.completedAt = willBeDone ? Date.now() : null;
+
+        const todayKey = CalendarUtils.toDateKey(new Date());
+        if (willBeDone) {
+          // Incrementa di +1 il contatore della data odierna nel log delle statistiche
+          productivityLog.value[todayKey] = (productivityLog.value[todayKey] || 0) + 1;
+        } else {
+          // Se deselezionato, decrementa se presente senza andare sotto zero
+          if (productivityLog.value[todayKey] && productivityLog.value[todayKey] > 0) {
+            productivityLog.value[todayKey]--;
+          }
+        }
       }
     };
 
@@ -614,6 +644,10 @@ const app = createApp({
     const deleteTodo = (id) => {
       const t = todos.value.find(item => item.id === id);
       if (t) {
+        if (!t.completed && !t.isCompleted && t.status !== 'done') {
+          const todayKey = CalendarUtils.toDateKey(new Date());
+          productivityLog.value[todayKey] = (productivityLog.value[todayKey] || 0) + 1;
+        }
         t.completed = true;
         t.isCompleted = true;
         t.status = 'done';
@@ -621,16 +655,14 @@ const app = createApp({
       }
     };
 
-    const clearCompletedTodos = () => {
-      todos.value.forEach(t => {
-        if (t.completed || t.isCompleted || t.status === 'done') {
-          t.completed = true;
-          t.isCompleted = true;
-          t.status = 'done';
-          t.completedAt = t.completedAt || Date.now();
-        }
-      });
+    // Hard Delete: Svuota tutti i task completati eliminandoli fisicamente dalla lista/database.
+    // NON tocca in alcun modo il log delle statistiche (productivityLog).
+    const hardDeleteCompletedTodos = () => {
+      todos.value = todos.value.filter(t => !t.completed && !t.isCompleted && t.status !== 'done');
+      triggerAutoSave();
     };
+
+    const clearCompletedTodos = hardDeleteCompletedTodos;
 
     // --- Modifica del testo del Task ---
     const startEditTodo = (todo) => {
@@ -726,18 +758,10 @@ const app = createApp({
       const now = Date.now();
       const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
 
-      // Task completati negli ultimi 7 giorni
-      const completedLast7Days = todos.value.filter(t => {
-        if (!t.completed) return false;
-        const time = t.completedAt || t.createdAt || 0;
-        return time >= sevenDaysAgo;
-      });
-
-      const totalCompletedWeek = completedLast7Days.length;
-
-      // Genera 7 barre giornaliere per gli ultimi 7 giorni
+      // Genera 7 barre giornaliere per gli ultimi 7 giorni leggendo dal productivityLog separato
       const dailyBars = [];
       const dayCounts = {};
+      let totalCompletedWeek = 0;
 
       for (let i = 6; i >= 0; i--) {
         const d = new Date();
@@ -747,11 +771,9 @@ const app = createApp({
         const dayShort = CalendarUtils.DAYS_SHORT_IT[dayIdx];
         const dayFull = CalendarUtils.DAYS_IT[dayIdx];
 
-        const count = completedLast7Days.filter(t => {
-          const compTime = t.completedAt || t.createdAt;
-          const compDateKey = CalendarUtils.toDateKey(new Date(compTime));
-          return compDateKey === dateKey;
-        }).length;
+        // Lettura diretta dal log separato delle statistiche
+        const count = productivityLog.value[dateKey] || 0;
+        totalCompletedWeek += count;
 
         dayCounts[dayFull] = (dayCounts[dayFull] || 0) + count;
 
@@ -781,9 +803,10 @@ const app = createApp({
         b.isPeak = b.count === peakDayCount && peakDayCount > 0;
       });
 
-      const recentCompletedTasks = [...completedLast7Days].sort((a, b) => {
-        return (b.completedAt || b.createdAt) - (a.completedAt || a.createdAt);
-      });
+      // Elenco visuale degli eventuali task completati ancora presenti in memoria
+      const recentCompletedTasks = todos.value
+        .filter(t => t.completed || t.isCompleted || t.status === 'done')
+        .sort((a, b) => (b.completedAt || b.createdAt || 0) - (a.completedAt || a.createdAt || 0));
 
       return {
         totalCompletedWeek,
@@ -926,6 +949,7 @@ const app = createApp({
       toggleTodo,
       deleteTodo,
       clearCompletedTodos,
+      hardDeleteCompletedTodos,
       closeDrawers,
       toDateKey: CalendarUtils.toDateKey,
       CalendarUtils,
@@ -954,7 +978,8 @@ const app = createApp({
 
       // Productivity Stats
       showProductivityModal,
-      productivityStats
+      productivityStats,
+      productivityLog
     };
   }
 });
