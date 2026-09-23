@@ -640,19 +640,9 @@ const app = createApp({
       todo.priority = order[nextIdx];
     };
 
-    // Soft delete: invece di rimuovere fisicamente l'elemento, aggiorna lo stato a completato/done
+    // Azione "Elimina" (Cestino): eliminazione definitiva (hard delete) del singolo task senza toccare le statistiche
     const deleteTodo = (id) => {
-      const t = todos.value.find(item => item.id === id);
-      if (t) {
-        if (!t.completed && !t.isCompleted && t.status !== 'done') {
-          const todayKey = CalendarUtils.toDateKey(new Date());
-          productivityLog.value[todayKey] = (productivityLog.value[todayKey] || 0) + 1;
-        }
-        t.completed = true;
-        t.isCompleted = true;
-        t.status = 'done';
-        t.completedAt = t.completedAt || Date.now();
-      }
+      todos.value = todos.value.filter(t => t.id !== id);
     };
 
     // Hard Delete: Svuota tutti i task completati eliminandoli fisicamente dalla lista/database.
