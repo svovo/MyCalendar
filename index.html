@@ -814,17 +814,28 @@
                :draggable="!todo.completed"
                @dragstart="!todo.completed && onTaskDragStart(todo, $event)"
                @dragend="onTaskDragEnd"
+               @dragover.prevent="!todo.completed && onReorderDragOver(todo, $event)"
+               @dragleave="onReorderDragLeave(todo)"
+               @drop.stop="!todo.completed && onReorderDrop(todo, $event)"
                :class="[
                  'group flex items-center justify-between p-2.5 rounded-xl border transition-all',
                  todo.completed ? 'bg-slate-50 border-slate-100 opacity-70' : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm',
                  !todo.completed ? 'todo-draggable' : '',
-                 draggedTodo?.id === todo.id ? 'todo-dragging' : ''
+                 reorderDraggedId === todo.id ? 'todo-dragging' : '',
+                 reorderDragOverId === todo.id ? 'todo-reorder-over' : ''
                ]">
-            <!-- Drag handle + Priority Flag -->
+            <!-- Drag handle (riordino) + Priority Flag -->
             <div class="flex items-center flex-shrink-0 mr-2 space-x-1">
-              <svg v-if="!todo.completed" class="w-3.5 h-3.5 text-slate-300 cursor-grab" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 6a2 2 0 100-4 2 2 0 000 4zM8 14a2 2 0 100-4 2 2 0 000 4zM8 22a2 2 0 100-4 2 2 0 000 4zM16 6a2 2 0 100-4 2 2 0 000 4zM16 14a2 2 0 100-4 2 2 0 000 4zM16 22a2 2 0 100-4 2 2 0 000 4z"/>
-              </svg>
+              <span v-if="!todo.completed"
+                    @mousedown.stop
+                    @dragstart.stop="onReorderDragStart(todo, $event)"
+                    draggable="true"
+                    title="Trascina per riordinare"
+                    class="todo-reorder-handle flex items-center justify-center w-4 h-4 text-slate-300 hover:text-slate-500 transition-colors cursor-grab active:cursor-grabbing">
+                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M7 4a1 1 0 100-2 1 1 0 000 2zM13 4a1 1 0 100-2 1 1 0 000 2zM7 10a1 1 0 100-2 1 1 0 000 2zM13 10a1 1 0 100-2 1 1 0 000 2zM7 16a1 1 0 100-2 1 1 0 000 2zM13 16a1 1 0 100-2 1 1 0 000 2z"/>
+                </svg>
+              </span>
               <button v-if="!todo.completed"
                       @click.stop="cycleTodoPriority(todo)"
                       :title="'Priorità: ' + (TODO_PRIORITIES[todo.priority || 'normal']?.label || '') + ' – clicca per cambiare'"
@@ -878,7 +889,7 @@
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                 </svg>
               </button>
-              <!-- Delete Button (Soft-Delete) -->
+              <!-- Delete Button -->
               <button @click="deleteTodo(todo.id)" 
                       class="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all"
                       title="Elimina attività">
@@ -889,10 +900,12 @@
             </div>
           </div>
 
-          <!-- Tip drag -->
-          <p v-if="todos.some(t => !t.completed)" class="text-center text-[10px] text-slate-400 pt-2">
-            ↕ Trascina un'attività sullo slot del calendario per programmarla
-          </p>
+
+          <!-- Tips drag -->
+          <div v-if="todos.some(t => !t.completed)" class="text-center text-[10px] text-slate-400 pt-2 space-y-0.5">
+            <p>⠿ Trascina il <strong>manubrio</strong> ⠿ per riordinare le attività</p>
+            <p>↕ Trascina una riga sul calendario per programmarla</p>
+          </div>
         </div>
       </aside>
 
@@ -987,7 +1000,18 @@
           <!-- Mobile Items List -->
           <div class="flex-1 overflow-y-auto p-3 space-y-2">
             <div v-for="todo in filteredTodos" :key="todo.id" 
-                 class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                 :draggable="!todo.completed"
+                 @dragstart="!todo.completed && onReorderDragStart(todo, $event)"
+                 @dragend="onReorderDragEnd"
+                 @dragover.prevent="!todo.completed && onReorderDragOver(todo, $event)"
+                 @dragleave="onReorderDragLeave(todo)"
+                 @drop.stop="!todo.completed && onReorderDrop(todo, $event)"
+                 :class="[
+                   'flex items-center justify-between p-2.5 rounded-xl border transition-all',
+                   todo.completed ? 'bg-slate-50 border-slate-200 opacity-70' : 'bg-white border-slate-200',
+                   reorderDraggedId === todo.id ? 'todo-dragging' : '',
+                   reorderDragOverId === todo.id ? 'todo-reorder-over' : ''
+                 ]">
               <!-- Mobile Edit Mode -->
               <div v-if="editingTodoId === todo.id" class="flex items-center space-x-1 flex-1 min-w-0">
                 <input type="text" 
@@ -1009,7 +1033,16 @@
 
               <!-- Mobile Normal Mode -->
               <template v-else>
-                <div class="flex items-center flex-shrink-0 mr-1.5">
+                <div class="flex items-center flex-shrink-0 mr-1.5 space-x-1">
+                  <span v-if="!todo.completed"
+                        @dragstart.stop="onReorderDragStart(todo, $event)"
+                        draggable="true"
+                        title="Trascina per riordinare"
+                        class="todo-reorder-handle flex items-center justify-center w-4 h-4 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing transition-colors">
+                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M7 4a1 1 0 100-2 1 1 0 000 2zM13 4a1 1 0 100-2 1 1 0 000 2zM7 10a1 1 0 100-2 1 1 0 000 2zM13 10a1 1 0 100-2 1 1 0 000 2zM7 16a1 1 0 100-2 1 1 0 000 2zM13 16a1 1 0 100-2 1 1 0 000 2z"/>
+                    </svg>
+                  </span>
                   <button @click.stop="cycleTodoPriority(todo)" class="text-sm leading-none" :title="'Priorità: ' + (TODO_PRIORITIES[todo.priority || 'normal']?.label || '')">
                     {{ TODO_PRIORITIES[todo.priority || 'normal']?.flag || '🔵' }}
                   </button>

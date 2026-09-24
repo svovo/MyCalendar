@@ -67,8 +67,8 @@ const app = createApp({
     const TODO_PRIORITIES = {
       urgent: { key: 'urgent', label: 'Urgente', color: '#ef4444', flag: '🚩', bg: 'bg-rose-50 text-rose-700 border-rose-200 ring-rose-400' },
       important: { key: 'important', label: 'Importante', color: '#f59e0b', flag: '🟡', bg: 'bg-amber-50 text-amber-700 border-amber-200 ring-amber-400' },
-      normal: { key: 'normal', label: 'Non urgente', color: '#3b82f6', flag: '🔵', bg: 'bg-blue-50 text-blue-700 border-blue-200 ring-blue-400' },
-      low: { key: 'low', label: 'Da fare quando si riesce', color: '#10b981', flag: '🟢', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200 ring-emerald-400' }
+      normal: { key: 'normal', label: 'Ordinario', color: '#3b82f6', flag: '🔵', bg: 'bg-blue-50 text-blue-700 border-blue-200 ring-blue-400' },
+      low: { key: 'low', label: 'Senza scadenza', color: '#10b981', flag: '🟢', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200 ring-emerald-400' }
     };
     const todos = ref([]);
     const newTodoText = ref('');
@@ -81,6 +81,10 @@ const app = createApp({
     // --- Drag & Drop Time Blocking State ---
     const draggedTodo = ref(null);
     const dragOverSlotId = ref('');
+
+    // --- Drag & Drop Reorder State ---
+    const reorderDraggedId = ref(null);   // ID del todo che si sta trascinando per riordino
+    const reorderDragOverId = ref(null);  // ID del todo sopra cui si sta passando
 
     // --- Statistiche Produttività State ---
     const showProductivityModal = ref(false);
@@ -674,8 +678,70 @@ const app = createApp({
       editingTodoText.value = '';
     };
 
+    // --- Drag & Drop per Riordino Task nella To-Do List ---
+    const onReorderDragStart = (todo, event) => {
+      reorderDraggedId.value = todo.id;
+      if (event && event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', todo.id);
+      }
+    };
+
+    const onReorderDragOver = (todo, event) => {
+      event.preventDefault();
+      if (reorderDraggedId.value && reorderDraggedId.value !== todo.id) {
+        reorderDragOverId.value = todo.id;
+        if (event && event.dataTransfer) {
+          event.dataTransfer.dropEffect = 'move';
+        }
+      }
+    };
+
+    const onReorderDragLeave = (todo) => {
+      if (reorderDragOverId.value === todo.id) {
+        reorderDragOverId.value = null;
+      }
+    };
+
+    const onReorderDrop = (targetTodo, event) => {
+      event.preventDefault();
+      const draggedId = reorderDraggedId.value;
+      const targetId = targetTodo.id;
+
+      if (!draggedId || draggedId === targetId) {
+        reorderDraggedId.value = null;
+        reorderDragOverId.value = null;
+        return;
+      }
+
+      const arr = todos.value;
+      const fromIndex = arr.findIndex(t => t.id === draggedId);
+      const toIndex = arr.findIndex(t => t.id === targetId);
+
+      if (fromIndex === -1 || toIndex === -1) {
+        reorderDraggedId.value = null;
+        reorderDragOverId.value = null;
+        return;
+      }
+
+      // Rimuove l'elemento dalla posizione originale e lo inserisce nella nuova
+      const [moved] = arr.splice(fromIndex, 1);
+      arr.splice(toIndex, 0, moved);
+
+      reorderDraggedId.value = null;
+      reorderDragOverId.value = null;
+      triggerAutoSave();
+    };
+
+    const onReorderDragEnd = () => {
+      reorderDraggedId.value = null;
+      reorderDragOverId.value = null;
+    };
+
     // --- Drag & Drop per Time Blocking sul Calendario ---
     const onTaskDragStart = (todo, event) => {
+      // Se è già attivo un drag di riordino (dall'handle), non avvia il time-blocking
+      if (reorderDraggedId.value) return;
       draggedTodo.value = todo;
       if (event && event.dataTransfer) {
         event.dataTransfer.setData('text/plain', todo.id);
@@ -965,6 +1031,15 @@ const app = createApp({
       onSlotDragOver,
       onSlotDragLeave,
       onSlotDrop,
+
+      // Drag and Drop Reorder To-Do
+      reorderDraggedId,
+      reorderDragOverId,
+      onReorderDragStart,
+      onReorderDragOver,
+      onReorderDragLeave,
+      onReorderDrop,
+      onReorderDragEnd,
 
       // Productivity Stats
       showProductivityModal,
